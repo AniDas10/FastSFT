@@ -3,7 +3,6 @@
 from typing import Dict
 
 from datasets import Dataset, DatasetDict, concatenate_datasets
-
 from distilabel.distiset import Distiset
 
 from constants import DEFAULT_SCORE_THRESHOLD, MAX_REFINE_ITERATIONS

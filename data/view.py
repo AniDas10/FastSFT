@@ -6,16 +6,16 @@ import argparse
 import os
 from typing import Optional
 
-from distilabel.distiset import Distiset
 from rich.console import Console
 from rich.panel import Panel
 
-from constants import DEFAULT_OUTPUT_DIR
+from constants import DEFAULT_OUTPUT_DIR, FORMATTED_OUTPUT_SUBDIR, RAW_OUTPUT_SUBDIR
+from helper import load_data
 
 console = Console()
 
 
-def _latest_run_path(base_dir: str = DEFAULT_OUTPUT_DIR) -> str:
+def _latest_run_path(base_dir: str) -> str:
     """Returns the most recent timestamped run folder under `base_dir`.
 
     Run folder names are `RUN_TIMESTAMP_FORMAT`-formatted, which sorts
@@ -37,23 +37,31 @@ def _latest_run_path(base_dir: str = DEFAULT_OUTPUT_DIR) -> str:
 
 
 class DatasetViewer:
-    """Loads a `Distiset` saved via `SyntheticDatasetGenerator` and previews samples."""
+    """Loads a `Distiset` saved via `DataGenerator`/`DataFormatter` and
+    previews samples."""
 
-    def __init__(
-        self,
-        path: Optional[str] = None,
-        config: str = "default",
-        split: str = "train",
-    ):
-        distiset = Distiset.load_from_disk(path or _latest_run_path())
-        self.dataset = distiset[config][split]
+    def __init__(self, path: Optional[str] = None, kind: str = "raw"):
+        if path is None:
+            subdir = FORMATTED_OUTPUT_SUBDIR if kind == "formatted" else RAW_OUTPUT_SUBDIR
+            path = _latest_run_path(os.path.join(DEFAULT_OUTPUT_DIR, subdir))
+        distiset = load_data(path)
+        self.dataset = distiset["default"]["train"]
 
     def raw_samples(self, n: int = 5) -> None:
-        """Prints the first `n` raw (instruction, generation) samples as generated."""
+        """Prints the first `n` raw samples' `messages` as generated."""
         for i, row in enumerate(self.dataset.select(range(min(n, len(self.dataset))))):
-            body = row.get("generation", "")
-            title = row.get("instruction", f"Sample {i}")
-            console.print(Panel(body, title=f"[{i}] {title}", expand=False))
+            messages = row.get("messages", [])
+            body = "\n\n".join(
+                f"[bold]{m.get('role', '?')}[/bold]: {m.get('content', '')}"
+                for m in messages
+            )
+            console.print(Panel(body, title=f"[{i}]", expand=False))
+
+    def formatted_samples(self, n: int = 5) -> None:
+        """Prints the first `n` samples' `text` column, as rendered by
+        DataFormatter through the child model's chat template."""
+        for i, row in enumerate(self.dataset.select(range(min(n, len(self.dataset))))):
+            console.print(Panel(row.get("text", ""), title=f"[{i}]", expand=False))
 
 
 def main():
@@ -61,12 +69,24 @@ def main():
     parser.add_argument(
         "--path",
         default=None,
-        help=f"Directory the dataset was saved to (default: latest run under {DEFAULT_OUTPUT_DIR}/).",
+        help=f"Directory the dataset was saved to (default: latest run under "
+        f"{DEFAULT_OUTPUT_DIR}/{RAW_OUTPUT_SUBDIR}/ or {DEFAULT_OUTPUT_DIR}/"
+        f"{FORMATTED_OUTPUT_SUBDIR}/, depending on --formatted).",
     )
     parser.add_argument("--num-samples", type=int, default=5, help="Number of samples to display.")
+    parser.add_argument(
+        "--formatted",
+        action="store_true",
+        help="Show the DataFormatter-rendered 'text' column instead of raw 'messages'.",
+    )
     args = parser.parse_args()
 
-    DatasetViewer(args.path).raw_samples(args.num_samples)
+    kind = "formatted" if args.formatted else "raw"
+    viewer = DatasetViewer(args.path, kind=kind)
+    if args.formatted:
+        viewer.formatted_samples(args.num_samples)
+    else:
+        viewer.raw_samples(args.num_samples)
 
 
 if __name__ == "__main__":

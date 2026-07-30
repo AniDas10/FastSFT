@@ -2,9 +2,9 @@
 
 from typing import Dict, List, Optional
 
+from distilabel.distiset import Distiset
 from pydantic import BaseModel
 
-from distilabel.distiset import Distiset
 from constants import DEFAULT_JUDGE_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_SCORE_THRESHOLD
 from model.base import Model
 
