@@ -5,35 +5,32 @@ from distilabel.distiset import Distiset
 from transformers import AutoTokenizer
 
 from stages.base import Stage
+from stages.constants import DATA_FORMATTER
 
 
 class DataFormatter(Stage):
-    """Second stage of the DistillationPipeline.
-
-    Renders each row's `messages` (a list of `{"role": ..., "content": ...}`
-    dicts) into the exact chat-template text the target ("child") model
-    expects for fine-tuning, via that model's own Hugging Face tokenizer --
-    every open instruct/chat model ships a `chat_template` alongside its
-    weights, so this needs no per-model formatting logic of its own (see
-    README for why).
-
-    Deliberately schema-agnostic beyond the `messages` column itself: it
-    doesn't care how many turns there are or which stage produced them, so
-    it isn't coupled to DataGenerator specifically -- any stage (or hand-
-    supplied dataset via skip_generation) that emits `messages` in this
-    shape works.
+    """Renders each row's `messages` into the child model's chat-template text
+    via that model's Hugging Face tokenizer.
     """
+
+    name = DATA_FORMATTER
 
     def __init__(self, child_model_id: str, verbose: bool = True):
         super().__init__(verbose=verbose)
         self._child_model_id = child_model_id
-        self._tokenizer = AutoTokenizer.from_pretrained(child_model_id)
-        if self._tokenizer.chat_template is None:
-            raise ValueError(
-                f"'{child_model_id}' has no chat_template -- it's likely a "
-                "base (non-instruct) model. DataFormatter needs a chat/"
-                "instruct model that ships a chat_template."
-            )
+        self._tokenizer = None
+
+    def _load_tokenizer(self):
+        """Loads, validates, and caches the child model's tokenizer on first use."""
+        if self._tokenizer is None:
+            tokenizer = AutoTokenizer.from_pretrained(self._child_model_id)
+            if tokenizer.chat_template is None:
+                raise ValueError(
+                    f"'{self._child_model_id}' has no chat_template -- DataFormatter "
+                    "needs a chat/instruct model, not a base model."
+                )
+            self._tokenizer = tokenizer
+        return self._tokenizer
 
     def _validate_input(self, distiset: Distiset) -> None:
         train = distiset["default"]["train"]
@@ -42,8 +39,8 @@ class DataFormatter(Stage):
                 "DataFormatter.run() requires a 'messages' column (a list of "
                 "{'role': ..., 'content': ...} dicts) in the input distiset; "
                 f"got columns: {train.column_names}. This usually means a "
-                "hand-supplied raw_dataset (skip_generation) doesn't match "
-                "the expected schema."
+                "hand-supplied dataset (via DistillationPipeline's "
+                "start_stage) doesn't match the expected schema."
             )
         if len(train) > 0:
             first = train[0]["messages"]
@@ -57,23 +54,17 @@ class DataFormatter(Stage):
                     f"row 0 was: {first!r}."
                 )
 
-    def run(self, distiset: Distiset) -> Distiset:
-        """Adds a `text` column: each row's `messages` rendered through the
-        child model's chat template. `tokenize=False` keeps the output as
-        plain text (viewable), not token ids -- numeric tokenization is
-        FineTuner's concern at train time.
-        """
-        self._validate_input(distiset)
+    def _run(self, distiset: Distiset) -> Distiset:
+        """Adds a `text` column: `messages` rendered through the chat template."""
         self._log(
             f"Formatting dataset for child model '{self._child_model_id}'..."
         )
+        tokenizer = self._load_tokenizer()
         train = distiset["default"]["train"]
 
         def render(row):
             return {
-                "text": self._tokenizer.apply_chat_template(
-                    row["messages"], tokenize=False
-                )
+                "text": tokenizer.apply_chat_template(row["messages"], tokenize=False)
             }
 
         train = train.map(render)

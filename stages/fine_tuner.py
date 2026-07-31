@@ -3,16 +3,15 @@
 from distilabel.distiset import Distiset
 
 from stages.base import Stage
+from stages.constants import FINE_TUNER
 
 
 class FineTuner(Stage):
-    """Third stage of the DistillationPipeline.
-
-    Fine-tunes the child model on a dataset already rendered to its chat
-    template (see DataFormatter). Scaffold only: training logic (framework,
-    hyperparameters) is a deliberately deferred follow-up task, not part of
-    this pass.
+    """Fine-tunes the child model on a chat-template-rendered dataset.
+    Scaffold only -- training not yet implemented.
     """
+
+    name = FINE_TUNER
 
     def __init__(self, child_model_id: str, verbose: bool = True):
         super().__init__(verbose=verbose)
@@ -27,11 +26,5 @@ class FineTuner(Stage):
                 "(see DataFormatter)."
             )
 
-    def run(self, formatted_distiset: Distiset):
-        self._validate_input(formatted_distiset)
-        raise NotImplementedError(
-            "FineTuner training isn't implemented yet. formatted_distiset is "
-            "expected to already have a 'text' column rendered via the child "
-            "model's chat template (see DataFormatter) -- training logic "
-            "(framework, hyperparameters) is a separate follow-up task."
-        )
+    def _run(self, formatted_distiset: Distiset):
+        raise NotImplementedError("FineTuner training isn't implemented yet.")

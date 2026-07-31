@@ -2,7 +2,6 @@
 
 from typing import Dict, List, Optional
 
-from distilabel.distiset import Distiset
 from pydantic import BaseModel
 
 from constants import DEFAULT_JUDGE_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_SCORE_THRESHOLD
@@ -14,12 +13,12 @@ class Score(BaseModel):
 
 
 class Judge(Model):
-    """Evaluates arbitrary text samples against an instruction/prompt.
-
-    Inherits model_id/api_key/temperature/build_llm/instruction handling
-    from Model, and adds judging-specific behavior on top: free-text
-    evaluation, numeric scoring, and a helper for counting failed samples.
+    """Evaluates arbitrary text samples against an instruction/prompt:
+    numeric scoring and failed-sample counting.
     """
+
+    # Verdicts filter the dataset but never enter it; exempt from open-weight.
+    _enforce_open_weight = False
 
     def __init__(
         self,
@@ -32,30 +31,10 @@ class Judge(Model):
             model_id=model_id, api_key=api_key, temperature=temperature, max_tokens=max_tokens
         )
 
-    def evaluate(self, samples: List[str], prompt: Optional[str] = None) -> Distiset:
-        """Runs the judging instructions against each of `samples`.
-
-        `prompt` overrides this instance's instruction for this call only;
-        if omitted, `get_instruction()` is used. Returns the resulting
-        Distiset; each row's "generation" column holds the judge's verdict
-        for the sample at the same index.
-        """
-        instruction = prompt if prompt is not None else self.get_instruction()
-        data = [{"instruction": s} for s in samples]
-        return self.run_pipeline(data, instruction, name="judge-evaluation")
-
     def score_samples(
         self, samples: Dict[str, str], prompt: Optional[str] = None
     ) -> Dict[str, float]:
-        """Scores each sample in `samples` (id -> text) against the judging
-        instructions.
-
-        `prompt` overrides this instance's instruction for this call only
-        (should describe a 0-10 rating scale); if omitted, `get_instruction()`
-        is used. The judge is forced via structured output to return only a
-        numeric score. Returns a mapping of id -> score so callers (e.g.
-        data/refactor.py) can look up individual samples by id afterwards.
-        """
+        """Scores each sample in `samples` (id -> text). Returns id -> score."""
         instruction = prompt if prompt is not None else self.get_instruction()
         data = [{"id": id_, "instruction": text} for id_, text in samples.items()]
 
@@ -72,11 +51,7 @@ class Judge(Model):
         return scores
 
     def failed_sample_count(
-        self, scores: Dict[str, float], threshold: float = DEFAULT_SCORE_THRESHOLD
+        self, scores: List[float], threshold: float = DEFAULT_SCORE_THRESHOLD
     ) -> int:
-        """Returns how many of `scores` fall below `threshold`.
-
-        data/refactor.py uses this to know how many replacement samples to
-        generate for the ones that failed the quality bar.
-        """
-        return sum(1 for score in scores.values() if score < threshold)
+        """Returns how many of `scores` fall below `threshold`."""
+        return sum(1 for score in scores if score < threshold)

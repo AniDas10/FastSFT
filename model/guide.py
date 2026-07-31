@@ -16,15 +16,11 @@ class GuideInstructions(BaseModel):
 
 class Guide(Model):
     """Generates tailored parent/judge system prompts, and a per-sample
-    instruction, from a freeform request.
-
-    Given a description of the desired dataset style/domain, produces the
-    parent's system prompt, the judge's system prompt, and the per-sample
-    instruction sent to the parent on every generation call -- all in one
-    structured-output call, so generation and judging are automatically
-    tailored instead of relying on generic defaults or the user's raw
-    (often plural/batch-shaped) request text.
+    instruction, from a freeform request -- in one structured-output call.
     """
+
+    # Output shapes instructions, not training data; exempt from open-weight.
+    _enforce_open_weight = False
 
     def __init__(
         self,
@@ -42,14 +38,7 @@ class Guide(Model):
 
     def generate_instructions(self, user_input: str) -> GuideInstructions:
         """Produces (parent_instruction, judge_instruction, sample_instruction)
-        from `user_input`.
-
-        parent_instruction/judge_instruction can be fed straight into
-        Model.set_instruction() / Judge.set_instruction() for the generation
-        and judging roles. sample_instruction should be passed to
-        SyntheticDatasetGenerator.generate() instead of the raw user_input,
-        since it's rewritten to ask for exactly one item per call.
-        """
+        from `user_input`; sample_instruction asks for exactly one item."""
         distiset = self.run_pipeline(
             [{"instruction": user_input}],
             self.get_instruction(),
