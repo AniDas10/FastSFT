@@ -4,7 +4,11 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 OPENROUTER_MODELS_URL = f"{OPENROUTER_BASE_URL}/models"
 
 # Parent directory every run's timestamped output folder is created under.
+# Raw (DataGenerator) and formatted (DataFormatter) outputs are kept in
+# separate subdirs so a saved run's stage is unambiguous from its path alone.
 DEFAULT_OUTPUT_DIR = "datasets"
+RAW_OUTPUT_SUBDIR = "raw"
+FORMATTED_OUTPUT_SUBDIR = "formatted"
 RUN_TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 
 # distilabel/OpenAILLM defaults max_new_tokens to 128, which is enough for a
@@ -38,3 +42,8 @@ DEFAULT_GUIDE_INSTRUCTION = (
     "0-10 against that style; and `sample_instruction`, a user instruction "
     "for a single item (never a batch or 'a dataset of' multiple items)."
 )
+
+# A Hugging Face repo id (NOT an OpenRouter model id -- different id space),
+# used by DataFormatter/FineTuner for AutoTokenizer/model loading. Small and
+# open, with a known chat_template, so it works out of the box as a default.
+DEFAULT_CHILD_MODEL_ID = "Qwen/Qwen2.5-0.5B-Instruct"

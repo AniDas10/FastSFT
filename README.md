@@ -1,31 +1,49 @@
 # LLM-Distillator
 
-A CLI tool that generates synthetic datasets for LLM distillation, using
-[distilabel](https://github.com/argilla-io/distilabel) as the pipeline engine
-and [OpenRouter](https://openrouter.ai) as the LLM backend. Given a freeform
-description of the dataset you want, it derives its own generation/judging
-instructions, generates samples, filters out low-quality ones, and
-regenerates replacements — all before saving to disk.
+A CLI tool that distills a large LLM into a small one via fine-tuning, using
+[distilabel](https://github.com/argilla-io/distilabel) as the dataset-
+generation engine, [OpenRouter](https://openrouter.ai) as the LLM backend for
+generation/judging, and Hugging Face `transformers` for chat-template
+rendering. Given a freeform description of the dataset you want and a target
+("child") model to fine-tune, it derives its own generation/judging
+instructions, generates and quality-filters samples, renders them into that
+child model's exact chat format, and (eventually) fine-tunes it.
+
+The top-level `DistillationPipeline` (`pipeline.py`) is three composable
+mini-pipelines, run in sequence, each independently usable and each
+skippable if you want to bring your own data at that point:
+
+1. **DataGenerator** (`stages/data_generator.py`) — prompt in, quality-filtered raw dataset out.
+2. **DataFormatter** (`stages/data_formatter.py`) — raw dataset in, chat-template-rendered dataset out.
+3. **FineTuner** (`stages/fine_tuner.py`) — formatted dataset in, fine-tuned child model out. **Scaffold only — not yet implemented** (see below).
 
 ## Quick start
 
 ```bash
 # .env holds OPENROUTER_API_KEY=sk-or-...
-uv run main.py "a pirate-themed customer support chatbot" --num-samples 50
+uv run main.py "a pirate-themed customer support chatbot" --num-samples 50 --child-model-id "Qwen/Qwen2.5-0.5B-Instruct"
 
-# preview the most recent run
-uv run python -m data.view
-uv run python -m data.view --num-samples 10
+# preview the most recent run (auto-detects the latest timestamped folder)
+uv run python -m data.view               # raw `messages`
+uv run python -m data.view --formatted   # rendered `text` column
 ```
 
-`main.py` prints `[1/4]`..`[4/4]` progress markers as it runs. Output is saved
-to `datasets/<timestamp>/` (a fresh timestamped folder every run — nothing is
-overwritten).
+Since `FineTuner` isn't implemented yet, a default end-to-end run will
+currently raise `NotImplementedError` once it reaches that stage — this is
+expected (see "Mini-pipeline stages" below), and `main.py` catches it so it
+can still save what was produced. `DataGenerator`'s output is saved to
+`datasets/raw/<timestamp>/` and `DataFormatter`'s to
+`datasets/formatted/<timestamp>/` (same timestamp for a given run, so the two
+stay associated) — both fully working and independently usable.
 
-## Pipeline flow (main.py)
+## Mini-pipeline stages
 
-1. **Guide** takes your freeform prompt and, in one LLM call, derives three
-   things: `parent_instruction` (system prompt for the generation model),
+### `DataGenerator` (`stages/data_generator.py`)
+
+Exactly what the whole pipeline used to be before it was split into stages.
+`run(prompt: str) -> Distiset`, three internal steps:
+1. **Guide** takes your freeform prompt and, in one LLM call, derives
+   `parent_instruction` (system prompt for the generation model),
    `judge_instruction` (system prompt for the quality judge), and
    `sample_instruction` (the actual per-sample instruction sent on every
    generation call — deliberately rewritten to ask for **one** item, since
@@ -39,15 +57,122 @@ overwritten).
    anything below `DEFAULT_SCORE_THRESHOLD`, and regenerates exactly that
    many replacements via the parent model — looping up to
    `MAX_REFINE_ITERATIONS` times or until nothing fails.
-4. The refined `Distiset` (same sample count as requested, all above
-   threshold) is saved to `datasets/<timestamp>/`.
+
+Internally, steps 1-3 all work in terms of distilabel's own
+`instruction`/`generation` field convention (`TextGeneration`'s fixed
+input/output names) — that's an implementation detail of how this stage
+talks to the parent/judge models via OpenRouter, not part of its output
+contract. Before returning, `run()` converts each row into the generic
+`messages` schema (`[{"role": "user", "content": ...}, {"role": "assistant",
+"content": ...}]`) that `DataFormatter` (and any future stage) actually
+consumes — this is what keeps `DataFormatter` decoupled from `DataGenerator`
+specifically, rather than coupled to its exact internal column names and
+assuming every upstream stage is single-turn Q&A.
+
+### `DataFormatter` (`stages/data_formatter.py`)
+
+`run(distiset: Distiset) -> Distiset`: adds a `text` column by rendering
+each row's `messages` through the **child model's own**
+chat template — `AutoTokenizer.from_pretrained(child_model_id).apply_chat_template(messages, tokenize=False)`.
+Schema-agnostic beyond the `messages` column itself — doesn't care how many
+turns there are or which stage produced them, so any stage (or hand-supplied
+dataset via `skip_generation`) that emits `messages` in this shape works,
+not just `DataGenerator`.
+
+Why this is designed the way it is (all settled through discussion before
+building it):
+- Nearly every open instruct/chat model on Hugging Face ships a
+  `chat_template` (Jinja2, in `tokenizer_config.json`) alongside its weights.
+  Rendering through it is *automatic* per model id — no per-model format
+  mapping (`user:`/`assistant:` vs `<|user|>`/`<|assistant|>` etc.) is
+  hand-coded anywhere in this codebase.
+- This is keyed off the specific checkpoint's tokenizer, not a model
+  "family" name — two fine-tunes of the same base model can define
+  different templates, so `DataFormatter` always fetches the tokenizer for
+  the exact `child_model_id` it's given, never infers it.
+- `tokenize=False` is essential: output is human-readable rendered text
+  (viewable via `data/view.py --formatted`), not token ids. Numeric
+  tokenization is `FineTuner`'s concern at train time, not `DataFormatter`'s.
+- This matters more for fine-tuning than it would for simple text generation:
+  SFT frameworks mask the training loss to only the assistant's response,
+  locating that boundary by pattern-matching the model's own role-marker
+  tokens. Training data that doesn't use the literal format a model's
+  template expects can silently break loss-masking, and separately, the
+  model never learns the format it'll actually be prompted with at
+  inference (whoever uses the fine-tuned model later will prompt it with
+  *its own* native template, not an ad hoc one).
+- The tokenizer is **tightly coupled** to `child_model_id`, not a separate
+  swappable choice — a model's embeddings were trained against its own
+  vocabulary, so using a different model's tokenizer produces token ids
+  the target model's weights were never trained to understand.
+- Raises `ValueError` if the given `child_model_id` has no `chat_template`
+  (e.g. a base/non-instruct model) rather than silently producing garbage.
+- Deliberately its **own stage**, not folded into `FineTuner`: keeps the
+  rendered dataset inspectable before training even starts, is what makes
+  the `skip_formatting` semantics below meaningful, and keeps `FineTuner`
+  itself framework-agnostic (it never needs to know about chat templates —
+  just tokenize the `text` column and train).
+
+### `FineTuner` (`stages/fine_tuner.py`) — scaffold only, not implemented
+
+`run(formatted_distiset)` currently raises `NotImplementedError`. The
+interface and skip-flag wiring are final; the actual training logic
+(framework choice, hyperparameters, hardware assumptions) was deliberately
+deferred as its own follow-up task rather than decided as a side effect of
+this restructuring. Its contract, once implemented: assume
+`formatted_distiset` already has a `text` column correctly rendered for
+`child_model_id` (via `DataFormatter`, or supplied directly through
+`skip_formatting`) and do no reformatting of its own.
+
+### `Stage` (`stages/base.py`)
+
+Shared base for the three mini-pipeline stages:
+- `verbose` storage and `_log(message)` (prints only if verbose), mirroring
+  how `model/base.py`'s `Model` anchors `Judge`/`Guide`. `DataGenerator`,
+  `DataFormatter`, and `FineTuner` all inherit from it instead of each
+  re-declaring their own identical `_log` method.
+- `_validate_input(data)`: every stage must implement this, called at the
+  top of its own `run()` before doing any real work -- this is what makes
+  each stage's input contract explicit and self-defending regardless of
+  caller (the top-level `DistillationPipeline`, or the stage used
+  standalone). Not an `abc.abstractmethod` (no new dependency needed) --
+  the base implementation just raises `NotImplementedError`, so a subclass
+  that forgets to override it fails loudly instead of silently validating
+  nothing. Each stage's own check:
+  - `DataGenerator`: `prompt` must be a non-empty, non-whitespace string.
+  - `DataFormatter`: the input `Distiset` must have a `messages` column
+    (a non-empty list of `{"role": ..., "content": ...}` dicts per row) --
+    this specifically guards the `skip_generation` path, where a
+    hand-supplied raw dataset is the likeliest place a malformed schema
+    shows up (otherwise it'd surface as a cryptic `KeyError` deep inside
+    `Dataset.map()`).
+  - `FineTuner`: the input `Distiset` must have a `text` column (i.e. it
+    was actually rendered via `DataFormatter`, or a `skip_formatting`
+    caller supplied an equivalent one) -- checked even though `run()` still
+    just raises `NotImplementedError` today, so the contract is already
+    validated ahead of whenever real training logic lands.
+
+Each stage's other constructor args (`guide_model`/`parent_model`/
+`judge_model`/`num_samples` on `DataGenerator`, `child_model_id`/`tokenizer`
+on `DataFormatter`, `child_model_id` on `FineTuner`) are all protected
+(`_`-prefixed) -- nothing outside each class ever reads them back, same
+reasoning already applied to `Model`'s `_api_key`/`_temperature`/
+`_max_tokens`. `DataGenerator` also validates `num_samples > 0` in its
+constructor (a config value, not a `run()` input, so it's checked in
+`__init__` rather than `_validate_input`).
 
 ## Architecture
 
 ```
 constants.py          -- every constant/default lives here, nowhere else
 warnings_filter.py     -- single source of truth for the pydantic warning filter
-pipeline.py            -- DistillationPipeline: guide -> generate -> refine
+helper.py               -- CLI-level load/save/validate/timestamp helpers (main.py)
+pipeline.py             -- DistillationPipeline: orchestrates the 3 stages + skip flags
+stages/
+  base.py              -- Stage: shared verbose/_log base for the 3 stages below
+  data_generator.py     -- DataGenerator(Stage): guide -> generate -> refine
+  data_formatter.py      -- DataFormatter(Stage): chat-template rendering for the child model
+  fine_tuner.py           -- FineTuner(Stage): trains the child model (scaffold only)
 model/
   base.py             -- Model: base class for any OpenRouter-backed role
   judge.py             -- Judge(Model): scoring + free-text evaluation
@@ -55,8 +180,8 @@ model/
 data/
   generator.py         -- SyntheticDatasetGenerator: raw sample generation
   refactor.py           -- DatasetRefactor: quality-filter + regenerate loop
-  view.py               -- DatasetViewer: terminal preview of a saved run
-main.py                -- CLI entry point: argparse + DistillationPipeline + save
+  view.py               -- DatasetViewer: terminal preview of a saved run/stage output
+main.py                -- CLI entry point: argparse (_input_args) + helper + DistillationPipeline
 ```
 
 ### `model.Model` (model/base.py)
@@ -94,12 +219,75 @@ Base class for any OpenRouter-backed model role. Handles:
 
 ### `DistillationPipeline` (pipeline.py)
 
-`run(prompt) -> Distiset`: runs steps `[1/4]`-`[3/4]` (guide instructions,
-raw generation, quality refinement) and returns the refined `Distiset`.
-Extracted out of `main.py` so the pipeline is reusable outside the CLI
-(a script, a notebook, ...); `main.py` itself only parses arguments and
-handles `[4/4]` (`save_to_disk`), since the output path is a CLI-specific
-concern.
+Top-level orchestrator wiring `DataGenerator -> DataFormatter -> FineTuner`
+(see "Mini-pipeline stages" above for what each does).
+`run(prompt=None, raw_dataset=None, formatted_dataset=None)`:
+- Default (no skip flags): `prompt` is required, all three stages run.
+- `skip_generation=True`: bring your own raw dataset via `raw_dataset`
+  (`instruction`/`generation` columns) — `DataFormatter` and `FineTuner`
+  still run.
+- `skip_formatting=True`: bring your own already-formatted dataset via
+  `formatted_dataset` (must already have a `text` column rendered for
+  `child_model_id`) — implies skipping generation too, only `FineTuner` runs.
+  You take on the "correctly formatted for this child model" guarantee
+  yourself in this case, same as `DataFormatter` would otherwise provide it.
+
+`main.py` exposes this via `--skip-generation`/`--raw-dataset-path` and
+`--skip-formatting`/`--formatted-dataset-path` (each pair loaded via
+`helper.load_data`). `run()` stores whatever it produces on
+`self.raw_dataset`/`self.formatted_dataset` (even a user-supplied one passed
+straight through) *before* handing off to `FineTuner` — this is what lets
+`main.py` still save both stages' output to disk even though `FineTuner`
+always raises for now (see below).
+
+**Stages that won't run aren't constructed.** `__init__` only builds
+`DataGenerator` if neither skip flag is set, and only builds `DataFormatter`
+if `skip_formatting=False` (`FineTuner` is always built -- every flow ends
+there). This matters because `DataFormatter.__init__` does a real network
+fetch (the child model's tokenizer via `AutoTokenizer.from_pretrained`) --
+previously `DistillationPipeline` built all three stages unconditionally,
+so e.g. `skip_formatting=True` with an unreachable/invalid `child_model_id`
+would fail at construction even though `DataFormatter` is never used in
+that flow. `self.data_generator`/`self.data_formatter` are `None` in exactly
+the cases where `run()` would never call them, so no extra guard is needed
+at the call sites.
+
+`run()` also validates that each of `prompt`/`raw_dataset`/`formatted_dataset`
+is provided **if and only if** the current skip flags will actually use it —
+providing one that would otherwise be silently ignored raises a clear
+`ValueError` instead (e.g. passing `raw_dataset` alongside
+`skip_formatting=True` — a common near-mistake, since it looks like "bring
+your own raw dataset" but `skip_formatting` actually skips `DataGenerator`
+*and* `DataFormatter`, so the raw dataset would never be used; the error
+message points at `skip_generation=True` instead, which is what that case
+actually wants).
+
+### `helper.py`
+
+CLI-level helpers shared by `main.py` (kept out of `main()` so it stays a
+thin argparse + wiring layer):
+- `current_timestamp() -> str`: `datetime.now()` formatted as
+  `RUN_TIMESTAMP_FORMAT`.
+- `load_data(path) -> Optional[Distiset]`: `Distiset.load_from_disk(path)`
+  if `path` is truthy, else `None` -- used for `--raw-dataset-path`/
+  `--formatted-dataset-path`, which are optional.
+- `save_data(dataset, subdir, label)`: no-ops if `dataset` is `None`
+  (a stage that didn't run), else saves to
+  `DEFAULT_OUTPUT_DIR/subdir/<current_timestamp()>` and prints a
+  confirmation. Calls `current_timestamp()` itself per call rather than
+  taking it as a param -- the two `save_data` calls in `main.py` (raw,
+  formatted) can in principle land in folders with slightly different
+  timestamps if they straddle a one-second boundary, since nothing forces
+  them to share one; in practice this is a non-issue since the calls are
+  back-to-back with no work in between.
+- `validate_skip_flags(args, parser)`: CLI-arg-presence checks (prompt
+  required unless a skip flag is set; `--skip-generation` requires
+  `--raw-dataset-path`; `--skip-formatting` requires
+  `--formatted-dataset-path`), calling `parser.error()` for a clean
+  usage+exit rather than raising. Deliberately only checks *presence* of
+  CLI args -- `DistillationPipeline._validate_inputs` separately
+  re-validates the loaded values regardless of caller, so the same
+  guarantees hold for non-CLI/programmatic use of `DistillationPipeline`.
 
 ### `warnings_filter.py`
 
@@ -132,19 +320,29 @@ structured-output call producing `parent_instruction`, `judge_instruction`,
 and asks for one generation each (not `n=num_samples` in a single call —
 see pitfalls). Output schema: `instruction, generation, distilabel_metadata,
 model_name`. No `id` column here — ids only appear downstream if something
-adds them.
+adds them. This is `instruction`/`generation`-shaped internally (distilabel's
+own field convention) — `DataGenerator.run()` converts to `messages` as its
+very last step, after `DatasetRefactor` below, so this schema never reaches
+`DataFormatter` directly.
 
 ### `DatasetRefactor` (data/refactor.py)
 
 `refine(distiset, threshold=DEFAULT_SCORE_THRESHOLD) -> Distiset`: the
-quality-filter + regenerate loop described in "Pipeline flow" step 3.
+quality-filter + regenerate loop described in "Pipeline flow" step 3, still
+working in the same `instruction`/`generation` schema as `SyntheticDatasetGenerator`
+above (converted to `messages` afterwards by `DataGenerator.run()`).
 Derives the regeneration prompt from `distiset["default"]["train"][0]["instruction"]`
 (all rows share it, since generation always repeats one instruction).
 
 ### `DatasetViewer` (data/view.py)
 
-`raw_samples(n=5)` prints the first `n` samples of a saved run. Defaults to
-the most recent folder under `datasets/` (folder names are
+`raw_samples(n=5)` prints the first `n` samples' `messages` column
+(a `DataGenerator` output, from `datasets/raw/`); `formatted_samples(n=5)`
+prints the `text` column instead (a `DataFormatter` output, from
+`datasets/formatted/`) — pick via `--formatted`. When `--path` isn't given,
+defaults to the most recent timestamped folder under `datasets/raw/` or
+`datasets/formatted/` respectively (`DatasetViewer(kind="raw"|"formatted")`
+controls which subdir is searched; folder names are
 `RUN_TIMESTAMP_FORMAT`-formatted, so lexicographic sort = chronological).
 **Must be run as `python -m data.view`, not `python data/view.py`** — it
 imports `constants` (a project-root module), and running it as a bare script
@@ -215,16 +413,17 @@ only puts `data/`'s own directory on `sys.path`, not the project root.
   paper) but failed unpredictably in live testing; `qwen-2.5-7b-instruct`
   verified reliable across 8/8 live runs across two different prompts before
   becoming the default.
-- The "child model" concept (an OpenRouter id resolved to a Hugging Face
-  tokenizer, used to render samples through a target model's chat template
-  for fine-tuning) **was built, then deleted entirely**. It never fit the
-  `Model` abstraction (no API calls, no temperature, no instruction — purely
-  a tokenizer lookup), and `data/refactor.py`'s purpose pivoted entirely to
-  quality-filtering + regeneration instead of child-model reformatting.
-  `transformers` is still listed in `pyproject.toml` but nothing in the
-  codebase imports it anymore — safe to `uv remove transformers` if desired.
-  If chat-template rendering for a specific target model is wanted again,
-  it should probably be its own small module, not a `Model` subclass.
+- `DEFAULT_CHILD_MODEL_ID = "Qwen/Qwen2.5-0.5B-Instruct"` — a **Hugging Face
+  repo id**, not an OpenRouter model id (different id space entirely, even
+  where the two happen to look similar) — used by `DataFormatter`/`FineTuner`
+  via `AutoTokenizer`/model loading, not via `Model`/OpenRouter at all.
+  Small, open, and ships a known `chat_template`, so it works standalone
+  with no extra setup. `Model._assert_open_weight`'s OpenRouter-catalog
+  check does not apply to it — fine-tuning a model already requires having
+  its open weights, so there's nothing separate to enforce.
+  (Note: an earlier version of this project had a similar "child model"
+  concept that was built and then deleted; it's since been revived properly
+  as the `DataFormatter`/`FineTuner` stages described above.)
 
 **Whenever picking/changing a default model**: don't trust "supports tool
 calls" from OpenRouter's model listing alone — verify empirically through
@@ -239,4 +438,7 @@ per-provider routing flakiness is real and doesn't always show up in one test.
 - Python 3.12 (`.python-version`), managed via `uv` — `uv run main.py ...`
   handles the venv automatically.
 - Key dependencies: `distilabel[instructor,openai]`, `pydantic`,
-  `python-dotenv`, `rich`, `requests`.
+  `python-dotenv`, `rich`, `requests`, `datasets`, `transformers` (for
+  `DataFormatter`'s `AutoTokenizer`; PyTorch is not installed and not needed
+  for tokenizer/chat-template use — only `FineTuner`'s eventual training
+  implementation would need it).
