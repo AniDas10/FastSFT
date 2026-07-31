@@ -27,12 +27,7 @@ load_dotenv()
 
 @lru_cache(maxsize=1)
 def _fetch_openrouter_models() -> dict:
-    """Fetches OpenRouter's model catalog, keyed by model id.
-
-    Cached for the life of the process -- every Model/Judge/Guide
-    construction calls this to validate open-weight status, and the catalog
-    doesn't change meaningfully within a single run.
-    """
+    """Fetches OpenRouter's model catalog, keyed by model id."""
     response = requests.get(OPENROUTER_MODELS_URL, timeout=30)
     response.raise_for_status()
     return {m["id"]: m for m in response.json()["data"]}
@@ -41,12 +36,13 @@ def _fetch_openrouter_models() -> dict:
 class Model:
     """An OpenRouter-backed model playing a generation/judging role.
 
-    Handles common initialization (api key, temperature, live open-weight
-    validation) and per-instance instruction (system prompt) storage. Usable
-    directly for a role that needs nothing extra (e.g. as the "parent"
-    generation model), or subclassed for roles that add real behavior of
-    their own (see Judge).
+    Handles api key, temperature, open-weight validation, and per-instance
+    instruction storage. Usable directly (as the parent) or subclassed (see Judge).
     """
+
+    # Only the parent's outputs become training data, so only it enforces the
+    # open-weight constraint; Guide and Judge set this False.
+    _enforce_open_weight: bool = True
 
     def __init__(
         self,
@@ -64,19 +60,17 @@ class Model:
         self._temperature = temperature
         self._max_tokens = max_tokens
         self._custom_instruction: Optional[str] = None
+        self._open_weight_verified = False
 
-        self._assert_open_weight()
+    def _ensure_open_weight(self) -> None:
+        """Runs the open-weight check once, on first use."""
+        if self._enforce_open_weight and not self._open_weight_verified:
+            self._assert_open_weight()
+            self._open_weight_verified = True
 
     def _assert_open_weight(self) -> None:
-        """Rejects models OpenRouter doesn't mirror on Hugging Face.
-
-        OpenRouter's API has no explicit "allows distillation" flag. The
-        closest real signal it exposes is `hugging_face_id`: it's set only
-        for open-weight models (Llama, Qwen, Mistral, ...) whose licenses
-        permit using outputs to train/distill other models, and is `null`
-        for closed-weight models (GPT, Claude, Gemini, ...) whose provider
-        ToS typically forbid that. Required for every model role.
-        """
+        """Rejects any model without a `hugging_face_id` on OpenRouter (the
+        open-weight signal)."""
         models = _fetch_openrouter_models()
 
         info = models.get(self.model_id)
@@ -92,13 +86,7 @@ class Model:
             )
 
     def _instruction(self) -> str:
-        """This role's default instruction (system prompt).
-
-        Empty by default -- instructions are expected to come from
-        set_instruction() (e.g. via model/guide.py's Guide) rather than a
-        generic hardcoded fallback. Subclasses may still override this for
-        role-specific defaults (see Judge).
-        """
+        """This role's default instruction. Empty unless a subclass overrides it."""
         return ""
 
     def set_instruction(self, instruction: str) -> None:
@@ -112,13 +100,7 @@ class Model:
     def _assert_structured_output(
         self, generation: Optional[str], sample_id: Optional[str] = None
     ) -> str:
-        """Raises a clear error if a structured-output call returned nothing.
-
-        A `None`/empty `generation` here almost always means the response
-        was truncated (raise max_tokens) or the model doesn't reliably
-        support tool calls (try a different model_id) -- both Guide and
-        Judge hit this, so it's centralized here rather than duplicated.
-        """
+        """Raises a clear error if a structured-output call returned nothing."""
         if not generation:
             context = f" for sample '{sample_id}'" if sample_id is not None else ""
             raise RuntimeError(
@@ -130,6 +112,7 @@ class Model:
         return generation
 
     def build_llm(self, structured_output: Optional[dict] = None) -> OpenAILLM:
+        self._ensure_open_weight()
         return OpenAILLM(
             model=self.model_id,
             base_url=OPENROUTER_BASE_URL,
@@ -148,16 +131,7 @@ class Model:
         structured_output: Optional[dict] = None,
         name: str = "pipeline",
     ) -> Distiset:
-        """Runs a single-step generation pipeline over `data`.
-
-        Shared by every role (Judge.evaluate/score_samples,
-        Guide.generate_instructions, SyntheticDatasetGenerator.generate) --
-        all of them are "load rows, run one TextGeneration task" and
-        differed only in `data`/`system_prompt`/`structured_output`. Public
-        (not protected) because it's called both by Model subclasses and by
-        SyntheticDatasetGenerator, which holds a Model by composition rather
-        than inheritance.
-        """
+        """Runs a single-step LoadDataFromDicts -> TextGeneration pipeline over `data`."""
         with Pipeline(name=name) as pipeline:
             load_data = LoadDataFromDicts(data=data)
             task = TextGeneration(

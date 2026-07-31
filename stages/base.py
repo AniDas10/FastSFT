@@ -4,19 +4,22 @@ from typing import Any
 
 
 class Stage:
-    """Common verbose/_log plumbing shared by DataGenerator, DataFormatter,
-    and FineTuner -- mirrors how model/base.py's Model anchors Judge/Guide.
+    """Base for pipeline stages: shared logging and a validate-then-run template.
 
-    Every stage must implement _validate_input, called at the top of its
-    own run() before doing any real work. This is what makes each stage's
-    input contract explicit and self-defending regardless of caller (the
-    top-level DistillationPipeline, or the stage used standalone) -- not an
-    abstract method (no `abc` dependency), but the base implementation
-    raises NotImplementedError so a subclass that forgets to override it
-    fails loudly rather than silently validating nothing.
+    Subclasses implement _validate_input and _run; run() is defined once here
+    and not overridden.
     """
 
+    # Canonical stage name, set by each subclass from stages/constants.py.
+    # __init__ rejects a subclass that leaves it unset.
+    name: str = ""
+
     def __init__(self, verbose: bool = True):
+        if not self.name:
+            raise NotImplementedError(
+                f"{type(self).__name__} must set a non-empty class attribute "
+                "`name` (its canonical stage name from stages/constants.py)."
+            )
         self._verbose = verbose
 
     def _log(self, message: str) -> None:
@@ -27,3 +30,11 @@ class Stage:
         raise NotImplementedError(
             f"{type(self).__name__} must implement _validate_input()."
         )
+
+    def _run(self, data: Any) -> Any:
+        raise NotImplementedError(f"{type(self).__name__} must implement _run().")
+
+    def run(self, data: Any) -> Any:
+        """Validate the input contract, then run."""
+        self._validate_input(data)
+        return self._run(data)

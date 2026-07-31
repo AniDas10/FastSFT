@@ -1,12 +1,13 @@
-"""Suppresses a noisy pydantic warning distilabel triggers at import time.
-
-Import this module first, before anything that (directly or transitively)
-imports distilabel -- the filter only works if it runs before distilabel's
-own pydantic model definitions are evaluated.
+"""Suppresses import-time warnings from distilabel and transformers.
+Must be imported before either (directly or transitively) is.
 """
 
+import os
 import warnings
 
 from pydantic.warnings import UnsupportedFieldAttributeWarning
 
 warnings.filterwarnings("ignore", category=UnsupportedFieldAttributeWarning)
+
+# Silences transformers' advisory warnings (e.g. "PyTorch was not found").
+os.environ.setdefault("TRANSFORMERS_NO_ADVISORY_WARNINGS", "1")

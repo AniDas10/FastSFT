@@ -4,30 +4,22 @@ from datasets import DatasetDict
 from distilabel.distiset import Distiset
 
 from constants import DEFAULT_GUIDE_MODEL, DEFAULT_JUDGE_MODEL, DEFAULT_PARENT_MODEL
-from data.generator import SyntheticDatasetGenerator
-from data.refactor import DatasetRefactor
+from data.generator import SyntheticDataGenerator
+from data.refiner import DataRefiner
 from model.base import Model
 from model.guide import Guide
 from model.judge import Judge
 from stages.base import Stage
+from stages.constants import DATA_GENERATOR
 
 
 class DataGenerator(Stage):
-    """Runs guide -> generate -> refine and returns the refined Distiset.
+    """Prompt in, quality-filtered Distiset out with a `messages` column.
 
-    First stage of the top-level DistillationPipeline (see pipeline.py) --
-    independently usable on its own, since it only needs a prompt in and
-    produces a quality-filtered Distiset out with a `messages` column (a
-    list of `{"role": ..., "content": ...}` dicts per row).
-
-    Internally, guide/generate/refine all work in terms of distilabel's own
-    `instruction`/`generation` field convention (TextGeneration's fixed
-    input/output names) -- that's an implementation detail of how this
-    stage talks to the parent/judge models, not part of its output
-    contract, so it's converted to `messages` right before returning. This
-    is what lets DataFormatter (and any future stage) consume this stage's
-    output without knowing anything about how it was produced.
+    Runs guide -> generate -> refine, then converts to `messages`.
     """
+
+    name = DATA_GENERATOR
 
     def __init__(
         self,
@@ -49,8 +41,7 @@ class DataGenerator(Stage):
         if not prompt or not prompt.strip():
             raise ValueError("DataGenerator.run() requires a non-empty prompt.")
 
-    def run(self, prompt: str) -> Distiset:
-        self._validate_input(prompt)
+    def _run(self, prompt: str) -> Distiset:
         self._log(
             f"[1/3] Deriving parent/judge instructions via guide model "
             f"'{self._guide_model}'..."
@@ -69,7 +60,7 @@ class DataGenerator(Stage):
             f"[2/3] Generating {self._num_samples} raw samples via parent model "
             f"'{self._parent_model}'..."
         )
-        generator = SyntheticDatasetGenerator(
+        generator = SyntheticDataGenerator(
             model=parent_model, num_samples=self._num_samples
         )
         distiset = generator.generate(instructions.sample_instruction)
@@ -78,8 +69,8 @@ class DataGenerator(Stage):
         )
 
         self._log(f"[3/3] Refining dataset via judge model '{self._judge_model}'...")
-        refactor = DatasetRefactor(parent_model=parent_model, judge_model=judge_model)
-        refined_distiset = refactor.refine(distiset)
+        refiner = DataRefiner(parent_model=parent_model, judge_model=judge_model)
+        refined_distiset = refiner.refine(distiset)
         self._log(
             f"[3/3] Done: refined dataset has "
             f"{len(refined_distiset['default']['train'])} samples."
@@ -88,12 +79,7 @@ class DataGenerator(Stage):
         return self._to_messages(refined_distiset)
 
     def _to_messages(self, distiset: Distiset) -> Distiset:
-        """Converts (instruction, generation) rows into the generic
-        `messages` schema DataFormatter (and any future stage) consumes.
-        Drops `instruction`/`generation` in favor of `messages` as the
-        single source of truth, rather than leaving two representations of
-        the same content in the output.
-        """
+        """Converts (instruction, generation) rows to the `messages` schema."""
         train = distiset["default"]["train"]
 
         def convert(row):

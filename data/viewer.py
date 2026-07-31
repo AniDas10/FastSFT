@@ -16,12 +16,7 @@ console = Console()
 
 
 def _latest_run_path(base_dir: str) -> str:
-    """Returns the most recent timestamped run folder under `base_dir`.
-
-    Run folder names are `RUN_TIMESTAMP_FORMAT`-formatted, which sorts
-    lexicographically in chronological order, so the last one alphabetically
-    is also the most recent.
-    """
+    """Returns the most recent timestamped run folder under `base_dir`."""
     if not os.path.isdir(base_dir):
         raise FileNotFoundError(
             f"No '{base_dir}' directory found. Run main.py first, or pass path=..."
@@ -36,9 +31,8 @@ def _latest_run_path(base_dir: str) -> str:
     return os.path.join(base_dir, runs[-1])
 
 
-class DatasetViewer:
-    """Loads a `Distiset` saved via `DataGenerator`/`DataFormatter` and
-    previews samples."""
+class DataViewer:
+    """Loads a saved `Distiset` and previews samples."""
 
     def __init__(self, path: Optional[str] = None, kind: str = "raw"):
         if path is None:
@@ -58,8 +52,7 @@ class DatasetViewer:
             console.print(Panel(body, title=f"[{i}]", expand=False))
 
     def formatted_samples(self, n: int = 5) -> None:
-        """Prints the first `n` samples' `text` column, as rendered by
-        DataFormatter through the child model's chat template."""
+        """Prints the first `n` samples' `text` column."""
         for i, row in enumerate(self.dataset.select(range(min(n, len(self.dataset))))):
             console.print(Panel(row.get("text", ""), title=f"[{i}]", expand=False))
 
@@ -82,7 +75,7 @@ def main():
     args = parser.parse_args()
 
     kind = "formatted" if args.formatted else "raw"
-    viewer = DatasetViewer(args.path, kind=kind)
+    viewer = DataViewer(args.path, kind=kind)
     if args.formatted:
         viewer.formatted_samples(args.num_samples)
     else:
