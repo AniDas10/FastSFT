@@ -1,22 +1,31 @@
-"""DataGenerator mini-pipeline: guide -> raw generation -> quality refinement."""
+"""DataGenerator mini-pipeline: guide -> generate instructions -> answer -> refine."""
 
 from datasets import DatasetDict
 from distilabel.distiset import Distiset
 
-from constants import DEFAULT_GUIDE_MODEL, DEFAULT_JUDGE_MODEL, DEFAULT_PARENT_MODEL
-from data.generator import SyntheticDataGenerator
+from constants import (
+    DEFAULT_GUIDE_MODEL,
+    DEFAULT_JUDGE_MODEL,
+    DEFAULT_PARENT_MODEL,
+    RAW_OUTPUT_SUBDIR,
+)
+from data.constants import GUIDE_TOKENS_PER_SEED
+from data.prompt_generator import PromptGenerator, seed_count
 from data.refiner import DataRefiner
+from data.response_generator import ResponseGenerator
 from model.base import Model
-from model.guide import Guide
+from model.constants import DEFAULT_MAX_TOKENS
+from model.guide import Guide, GuideInstructions
 from model.judge import Judge
-from stages.base import Stage
+from stages.base import Stage, save_distiset
 from stages.constants import DATA_GENERATOR
 
 
 class DataGenerator(Stage):
     """Prompt in, quality-filtered Distiset out with a `messages` column.
 
-    Runs guide -> generate -> refine, then converts to `messages`.
+    Runs guide -> generate instructions -> answer -> refine, then converts to
+    `messages`.
     """
 
     name = DATA_GENERATOR
@@ -42,13 +51,12 @@ class DataGenerator(Stage):
             raise ValueError("DataGenerator.run() requires a non-empty prompt.")
 
     def _run(self, prompt: str) -> Distiset:
+        instructions = self._setup(prompt)
         self._log(
-            f"[1/3] Deriving parent/judge instructions via guide model "
-            f"'{self._guide_model}'..."
+            f"[1/4] Derived instructions and "
+            f"{len(instructions.sample_instructions)} seed topics via guide "
+            f"model '{self._guide_model}'."
         )
-        guide = Guide(model_id=self._guide_model)
-        instructions = guide.generate_instructions(prompt)
-        self._log("[1/3] Done: derived parent and judge instructions.")
 
         parent_model = Model(model_id=self._parent_model)
         parent_model.set_instruction(instructions.parent_instruction)
@@ -57,26 +65,51 @@ class DataGenerator(Stage):
         judge_model.set_instruction(instructions.judge_instruction)
 
         self._log(
-            f"[2/3] Generating {self._num_samples} raw samples via parent model "
+            f"[2/4] Generating {self._num_samples} instructions across "
+            f"{len(instructions.sample_instructions)} topics via parent model "
             f"'{self._parent_model}'..."
         )
-        generator = SyntheticDataGenerator(
+        prompt_generator = PromptGenerator(
             model=parent_model, num_samples=self._num_samples
         )
-        distiset = generator.generate(instructions.sample_instruction)
+        generated_instructions = prompt_generator.generate(
+            instructions.sample_instructions
+        )
         self._log(
-            f"[2/3] Done: generated {len(distiset['default']['train'])} raw samples."
+            f"[2/4] Done: generated {len(generated_instructions)} instructions."
         )
 
-        self._log(f"[3/3] Refining dataset via judge model '{self._judge_model}'...")
+        self._log(
+            f"[3/4] Generating answers via parent model '{self._parent_model}'..."
+        )
+        response_generator = ResponseGenerator(model=parent_model)
+        distiset = response_generator.generate(generated_instructions)
+        self._log(
+            f"[3/4] Done: generated {len(distiset['default']['train'])} raw samples."
+        )
+
+        self._log(f"[4/4] Refining dataset via judge model '{self._judge_model}'...")
         refiner = DataRefiner(parent_model=parent_model, judge_model=judge_model)
         refined_distiset = refiner.refine(distiset)
         self._log(
-            f"[3/3] Done: refined dataset has "
+            f"[4/4] Done: refined dataset has "
             f"{len(refined_distiset['default']['train'])} samples."
         )
 
         return self._to_messages(refined_distiset)
+
+    def save_output(self, output: Distiset, run_id: str) -> str:
+        return save_distiset(output, RAW_OUTPUT_SUBDIR, run_id)
+
+    def _setup(self, prompt: str) -> GuideInstructions:
+        """Builds the guide (output budget scaled to the seed count) and
+        derives its instructions."""
+        num_seeds = seed_count(self._num_samples)
+        guide = Guide(
+            model_id=self._guide_model,
+            max_tokens=DEFAULT_MAX_TOKENS + num_seeds * GUIDE_TOKENS_PER_SEED,
+        )
+        return guide.generate_instructions(prompt, num_seeds=num_seeds)
 
     def _to_messages(self, distiset: Distiset) -> Distiset:
         """Converts (instruction, generation) rows to the `messages` schema."""

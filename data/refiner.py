@@ -5,15 +5,16 @@ from typing import List, Tuple
 from datasets import Dataset, DatasetDict, concatenate_datasets
 from distilabel.distiset import Distiset
 
-from constants import DEFAULT_SCORE_THRESHOLD, MAX_REFINE_ITERATIONS
-from data.generator import SyntheticDataGenerator
+from data.constants import MAX_REFINE_ITERATIONS
+from data.response_generator import ResponseGenerator
 from model.base import Model
+from model.constants import DEFAULT_SCORE_THRESHOLD
 from model.judge import Judge
 
 
 class DataRefiner:
-    """Replaces low-scoring samples with fresh ones, keeping the count
-    constant, up to MAX_REFINE_ITERATIONS times or until nothing fails.
+    """Re-answers low-scoring samples, keeping their instructions and the
+    count constant, up to MAX_REFINE_ITERATIONS times or until nothing fails.
     """
 
     def __init__(self, parent_model: Model, judge_model: Judge):
@@ -24,19 +25,16 @@ class DataRefiner:
         self, distiset: Distiset, threshold: float = DEFAULT_SCORE_THRESHOLD
     ) -> Distiset:
         train = distiset["default"]["train"]
-        prompt = train[0]["instruction"]
 
         # Score the initial batch once; thereafter score only fresh rows.
         scores = self._score(train)
         for _ in range(MAX_REFINE_ITERATIONS):
-            failed_count = self.judge_model.failed_sample_count(
-                scores, threshold=threshold
-            )
-            if failed_count == 0:
+            if self.judge_model.failed_sample_count(scores, threshold=threshold) == 0:
                 break
 
+            failed_instructions = self._failed_instructions(train, scores, threshold)
             train, scores = self._drop_failed(train, scores, threshold)
-            replacements = self._regenerate(failed_count, prompt)
+            replacements = self._regenerate(failed_instructions)
             train = concatenate_datasets([train, replacements])
             scores = scores + self._score(replacements)
 
@@ -48,6 +46,16 @@ class DataRefiner:
         scores_by_id = self.judge_model.score_samples(samples)
         return [scores_by_id[str(i)] for i in range(len(train))]
 
+    def _failed_instructions(
+        self, train: Dataset, scores: List[float], threshold: float
+    ) -> List[str]:
+        """Instructions of the rows scoring below `threshold`."""
+        return [
+            train[i]["instruction"]
+            for i in range(len(train))
+            if scores[i] < threshold
+        ]
+
     def _drop_failed(
         self, train: Dataset, scores: List[float], threshold: float
     ) -> Tuple[Dataset, List[float]]:
@@ -56,9 +64,9 @@ class DataRefiner:
         keep_indices = [i for i in range(len(train)) if scores[i] >= threshold]
         return train.select(keep_indices), [scores[i] for i in keep_indices]
 
-    def _regenerate(self, count: int, prompt: str) -> Dataset:
-        """Generates `count` fresh replacement rows for `prompt`."""
-        replacements = SyntheticDataGenerator(
-            model=self.parent_model, num_samples=count
-        ).generate(prompt)
+    def _regenerate(self, instructions: List[str]) -> Dataset:
+        """Generates fresh answers for `instructions`."""
+        replacements = ResponseGenerator(model=self.parent_model).generate(
+            instructions
+        )
         return replacements["default"]["train"]

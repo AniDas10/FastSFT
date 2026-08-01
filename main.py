@@ -7,17 +7,10 @@ from constants import (
     DEFAULT_GUIDE_MODEL,
     DEFAULT_JUDGE_MODEL,
     DEFAULT_PARENT_MODEL,
-    FORMATTED_OUTPUT_SUBDIR,
-    RAW_OUTPUT_SUBDIR,
 )
-from helper import load_data, save_data, validate_start_stage
+from helper import current_timestamp, load_data, validate_start_stage
 from pipeline import DistillationPipeline
-from stages.constants import (
-    DATA_FORMATTER,
-    DATA_GENERATOR,
-    STAGE_NAMES,
-    STAGE_ORDER,
-)
+from stages.constants import STAGE_NAMES, STAGE_ORDER
 
 
 def _input_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -75,14 +68,18 @@ def main():
         num_samples=args.num_samples,
         start_stage=args.start_stage,
     )
+    # One run_id for the whole run, so each stage's output folder shares it.
+    # Each stage is saved the moment it completes, so a later stage's failure
+    # (e.g. FineTuner's NotImplementedError) can't lose an earlier one's output.
+    run_id = current_timestamp()
     try:
-        pipeline.run(pipeline_input)
+        for stage, output in pipeline.run(pipeline_input):
+            path = stage.save_output(output, run_id)
+            if path:
+                print(f"Saved {stage.name} output to '{path}'")
     except NotImplementedError as e:
-        # FineTuner unimplemented; still save earlier stages' output.
+        # FineTuner unimplemented; earlier stages are already saved.
         print(f"Note: {e}")
-
-    save_data(pipeline.outputs.get(DATA_GENERATOR), RAW_OUTPUT_SUBDIR, "raw")
-    save_data(pipeline.outputs.get(DATA_FORMATTER), FORMATTED_OUTPUT_SUBDIR, "formatted")
 
 
 if __name__ == "__main__":

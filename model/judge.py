@@ -4,8 +4,9 @@ from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
-from constants import DEFAULT_JUDGE_MODEL, DEFAULT_MAX_TOKENS, DEFAULT_SCORE_THRESHOLD
+from constants import DEFAULT_JUDGE_MODEL
 from model.base import Model
+from model.constants import DEFAULT_MAX_TOKENS, DEFAULT_SCORE_THRESHOLD
 
 
 class Score(BaseModel):
@@ -46,7 +47,7 @@ class Judge(Model):
         )
         scores = {}
         for row in distiset["default"]["train"]:
-            generation = self._assert_structured_output(row["generation"], row["id"])
+            generation = self.assert_structured_output(row["generation"], row["id"])
             scores[row["id"]] = Score.model_validate_json(generation).score
         return scores
 

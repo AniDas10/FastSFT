@@ -1,6 +1,6 @@
 """Top-level DistillationPipeline: DataGenerator -> DataFormatter -> FineTuner."""
 
-from typing import Any, Dict, List
+from typing import Any, Iterator, List, Tuple
 
 from constants import (
     DEFAULT_CHILD_MODEL_ID,
@@ -27,6 +27,9 @@ class DistillationPipeline:
     - "data_generator" (default): run(prompt) runs everything.
     - "data_formatter": run(raw_dataset), needs a `messages` column.
     - "fine_tuner": run(formatted_dataset), needs a `text` column.
+
+    run() yields (stage, output) as each stage completes, so a caller can
+    persist incrementally.
     """
 
     def __init__(
@@ -51,9 +54,6 @@ class DistillationPipeline:
             num_samples=num_samples,
             verbose=verbose,
         )
-
-        # Keyed by stage name.
-        self.outputs: Dict[str, Any] = {}
 
     def _validate_start_stage(self, start_stage: str) -> None:
         if start_stage not in STAGE_NAMES:
@@ -88,18 +88,17 @@ class DistillationPipeline:
         }
         return [factories[name]() for name in STAGE_ORDER[self._start_index:]]
 
-    def run(self, data: Any) -> Any:
+    def run(self, data: Any) -> Iterator[Tuple[Stage, Any]]:
+        """Yields (stage, output) as each stage completes. Validates the input
+        eagerly, before any stage runs."""
         if data is None:
             raise ValueError(
                 f"run() requires an input for start_stage={self.start_stage!r} "
                 f"({'a prompt string' if self.start_stage == STAGE_ORDER[0] else 'a Distiset'})."
             )
+        return self._run_stages(data)
 
-        # Record the input against the stage before start_stage.
-        if self._start_index > 0:
-            self.outputs[STAGE_ORDER[self._start_index - 1]] = data
-
+    def _run_stages(self, data: Any) -> Iterator[Tuple[Stage, Any]]:
         for stage in self.stages:
             data = stage.run(data)
-            self.outputs[stage.name] = data
-        return data
+            yield stage, data

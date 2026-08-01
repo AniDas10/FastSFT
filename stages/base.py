@@ -1,6 +1,18 @@
 """Shared base for DistillationPipeline's mini-pipeline stages."""
 
-from typing import Any
+import os
+from typing import Any, Optional
+
+from distilabel.distiset import Distiset
+
+from constants import DEFAULT_OUTPUT_DIR
+
+
+def save_distiset(dataset: Distiset, subdir: str, run_id: str) -> str:
+    """Saves `dataset` under DEFAULT_OUTPUT_DIR/subdir/run_id; returns the path."""
+    path = os.path.join(DEFAULT_OUTPUT_DIR, subdir, run_id)
+    dataset.save_to_disk(path)
+    return path
 
 
 class Stage:
@@ -38,3 +50,8 @@ class Stage:
         """Validate the input contract, then run."""
         self._validate_input(data)
         return self._run(data)
+
+    def save_output(self, output: Any, run_id: str) -> Optional[str]:
+        """Persists this stage's output; returns the path, or None if there's
+        nothing to persist. Overridden by stages that produce a saved artifact."""
+        return None
