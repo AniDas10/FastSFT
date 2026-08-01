@@ -1,13 +1,12 @@
-"""CLI-level argument validation/loading/saving helpers shared by main.py."""
+"""CLI-level argument validation/loading/timestamp helpers shared by main.py."""
 
 import argparse
-import os
 from datetime import datetime
 from typing import Optional
 
 from distilabel.distiset import Distiset
 
-from constants import DEFAULT_OUTPUT_DIR, RUN_TIMESTAMP_FORMAT
+from constants import RUN_TIMESTAMP_FORMAT
 from stages.constants import STAGE_ORDER
 
 
@@ -19,15 +18,6 @@ def current_timestamp() -> str:
 def load_data(path: Optional[str]) -> Optional[Distiset]:
     """Loads a saved Distiset from `path`, or None if no path was given."""
     return Distiset.load_from_disk(path) if path else None
-
-
-def save_data(dataset: Optional[Distiset], subdir: str, label: str) -> None:
-    """Saves `dataset` under DEFAULT_OUTPUT_DIR/subdir/<timestamp>; no-op if None."""
-    if dataset is None:
-        return
-    output_dir = os.path.join(DEFAULT_OUTPUT_DIR, subdir, current_timestamp())
-    dataset.save_to_disk(output_dir)
-    print(f"Saved {label} dataset to '{output_dir}'")
 
 
 def validate_start_stage(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:

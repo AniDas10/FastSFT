@@ -4,7 +4,8 @@ from datasets import DatasetDict
 from distilabel.distiset import Distiset
 from transformers import AutoTokenizer
 
-from stages.base import Stage
+from constants import FORMATTED_OUTPUT_SUBDIR
+from stages.base import Stage, save_distiset
 from stages.constants import DATA_FORMATTER
 
 
@@ -31,6 +32,9 @@ class DataFormatter(Stage):
                 )
             self._tokenizer = tokenizer
         return self._tokenizer
+
+    def save_output(self, output: Distiset, run_id: str) -> str:
+        return save_distiset(output, FORMATTED_OUTPUT_SUBDIR, run_id)
 
     def _validate_input(self, distiset: Distiset) -> None:
         train = distiset["default"]["train"]

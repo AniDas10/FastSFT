@@ -14,3 +14,15 @@ dependencies = [
     "rich>=13.7.0",
     "transformers>=5.14.1",
 ]
+
+[tool.ruff.lint.isort]
+known-first-party = ["constants", "helper", "main", "pipeline", "data", "model", "stages"]
+# The `datasets/` output directory collides with the third-party `datasets`
+# library name, so ruff's filesystem detection misreads it as first-party.
+known-third-party = ["datasets"]
+# `warnings_filter` has import-time side effects and must precede distilabel/
+# transformers, so pin it to its own section ordered before everything else.
+section-order = ["sideeffects", "future", "standard-library", "third-party", "first-party", "local-folder"]
+
+[tool.ruff.lint.isort.sections]
+sideeffects = ["warnings_filter"]

@@ -1,22 +1,23 @@
 """Turns a freeform user request into tailored parent/judge instructions."""
 
-from typing import Optional
+from typing import List, Optional
 
 from pydantic import BaseModel
 
-from constants import DEFAULT_GUIDE_INSTRUCTION, DEFAULT_GUIDE_MODEL, DEFAULT_MAX_TOKENS
+from constants import DEFAULT_GUIDE_MODEL
 from model.base import Model
+from model.constants import DEFAULT_GUIDE_INSTRUCTION, DEFAULT_MAX_TOKENS
 
 
 class GuideInstructions(BaseModel):
     parent_instruction: str
     judge_instruction: str
-    sample_instruction: str
+    sample_instructions: List[str]
 
 
 class Guide(Model):
-    """Generates tailored parent/judge system prompts, and a per-sample
-    instruction, from a freeform request -- in one structured-output call.
+    """Generates tailored parent/judge system prompts, and a set of diverse
+    seed instructions, from a freeform request -- in one structured-output call.
     """
 
     # Output shapes instructions, not training data; exempt from open-weight.
@@ -36,15 +37,17 @@ class Guide(Model):
     def _instruction(self) -> str:
         return DEFAULT_GUIDE_INSTRUCTION
 
-    def generate_instructions(self, user_input: str) -> GuideInstructions:
-        """Produces (parent_instruction, judge_instruction, sample_instruction)
-        from `user_input`; sample_instruction asks for exactly one item."""
+    def generate_instructions(
+        self, user_input: str, num_seeds: int
+    ) -> GuideInstructions:
+        """Produces parent_instruction, judge_instruction, and `num_seeds`
+        diverse seed instructions from `user_input`."""
         distiset = self.run_pipeline(
             [{"instruction": user_input}],
-            self.get_instruction(),
+            self.get_instruction().format(num_seeds=num_seeds),
             structured_output={"schema": GuideInstructions, "format": "json"},
             name="guide-instructions",
         )
         row = next(iter(distiset["default"]["train"]))
-        generation = self._assert_structured_output(row["generation"])
+        generation = self.assert_structured_output(row["generation"])
         return GuideInstructions.model_validate_json(generation)

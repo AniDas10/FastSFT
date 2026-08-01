@@ -7,17 +7,16 @@ from functools import lru_cache
 from typing import List, Optional
 
 import requests
-from dotenv import load_dotenv
-
 from distilabel.distiset import Distiset
 from distilabel.models.llms import OpenAILLM
 from distilabel.pipeline import Pipeline
 from distilabel.steps import LoadDataFromDicts
 from distilabel.steps.tasks import TextGeneration
+from dotenv import load_dotenv
 
-from constants import (
+from constants import DEFAULT_PARENT_MODEL
+from model.constants import (
     DEFAULT_MAX_TOKENS,
-    DEFAULT_PARENT_MODEL,
     OPENROUTER_BASE_URL,
     OPENROUTER_MODELS_URL,
 )
@@ -97,7 +96,7 @@ class Model:
             return self._custom_instruction
         return self._instruction()
 
-    def _assert_structured_output(
+    def assert_structured_output(
         self, generation: Optional[str], sample_id: Optional[str] = None
     ) -> str:
         """Raises a clear error if a structured-output call returned nothing."""
