@@ -14,6 +14,14 @@ from helper import load_data
 
 console = Console()
 
+_ROLE_COLORS = {"user": "cyan", "assistant": "magenta"}
+
+
+def _format_message(message: dict) -> str:
+    role = message.get("role", "?")
+    color = _ROLE_COLORS.get(role, "white")
+    return f"[bold {color}]{role}[/bold {color}]: {message.get('content', '')}"
+
 
 def _latest_run_path(base_dir: str) -> str:
     """Returns the most recent timestamped run folder under `base_dir`."""
@@ -45,16 +53,27 @@ class DataViewer:
         """Prints the first `n` raw samples' `messages` as generated."""
         for i, row in enumerate(self.dataset.select(range(min(n, len(self.dataset))))):
             messages = row.get("messages", [])
-            body = "\n\n".join(
-                f"[bold]{m.get('role', '?')}[/bold]: {m.get('content', '')}"
-                for m in messages
+            body = "\n\n".join(_format_message(m) for m in messages)
+            console.print(
+                Panel(
+                    body,
+                    title=f"[bold cyan][{i}][/bold cyan]",
+                    border_style="cyan",
+                    expand=False,
+                )
             )
-            console.print(Panel(body, title=f"[{i}]", expand=False))
 
     def formatted_samples(self, n: int = 5) -> None:
         """Prints the first `n` samples' `text` column."""
         for i, row in enumerate(self.dataset.select(range(min(n, len(self.dataset))))):
-            console.print(Panel(row.get("text", ""), title=f"[{i}]", expand=False))
+            console.print(
+                Panel(
+                    row.get("text", ""),
+                    title=f"[bold cyan][{i}][/bold cyan]",
+                    border_style="cyan",
+                    expand=False,
+                )
+            )
 
 
 def main():

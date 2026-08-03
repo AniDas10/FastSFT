@@ -2,8 +2,10 @@
 
 import warnings_filter  # noqa: F401
 
+import logging
 import os
 from functools import lru_cache
+from logging.handlers import QueueHandler
 from typing import List, Optional
 
 import requests
@@ -30,6 +32,21 @@ def _fetch_openrouter_models() -> dict:
     response = requests.get(OPENROUTER_MODELS_URL, timeout=30)
     response.raise_for_status()
     return {m["id"]: m for m in response.json()["data"]}
+
+
+def _detach_stale_queue_handlers() -> None:
+    """Removes any QueueHandler left on the root logger.
+
+    distilabel's stop_logging() (utils/logging.py) closes its multiprocessing
+    queue after every Pipeline.run() but never detaches the QueueHandler it
+    attached to the root logger. Left in place, the next unrelated log call
+    anywhere in the process (e.g. huggingface_hub's HTTP-warning logger)
+    raises "Queue is closed" inside logging's Handler.emit().
+    """
+    root_logger = logging.getLogger()
+    for handler in root_logger.handlers[:]:
+        if isinstance(handler, QueueHandler):
+            root_logger.removeHandler(handler)
 
 
 class Model:
@@ -139,4 +156,6 @@ class Model:
             )
             load_data >> task
 
-        return pipeline.run(use_cache=False)
+        distiset = pipeline.run(use_cache=False)
+        _detach_stale_queue_handlers()
+        return distiset

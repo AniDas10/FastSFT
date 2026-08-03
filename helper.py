@@ -38,3 +38,29 @@ def validate_start_stage(args: argparse.Namespace, parser: argparse.ArgumentPars
                 f"prompt is ignored when --start-stage={args.start_stage} -- "
                 "pass --input-path instead."
             )
+
+
+def validate_training_flags(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """All the fine-tuning override flags are only meaningful alongside
+    --gpu-tier (which opts out of the cost heuristic); using one without it
+    is likely a mistake, not a silent no-op.
+    """
+    if args.gpu_tier is not None:
+        return
+    other_flags = {
+        "--strategy": args.strategy,
+        "--lora-rank": args.lora_rank,
+        "--target-modules": args.target_modules,
+        "--lora-dropout": args.lora_dropout,
+        "--batch-size": args.batch_size,
+        "--grad-accumulation": args.grad_accumulation,
+        "--learning-rate": args.learning_rate,
+        "--max-epochs": args.max_epochs,
+        "--eval-steps": args.eval_steps,
+        "--early-stopping-patience": args.early_stopping_patience,
+        "--validation-split": args.validation_split,
+        "--modal-timeout": args.modal_timeout,
+    }
+    given = [name for name, value in other_flags.items() if value is not None]
+    if given:
+        parser.error(f"{', '.join(given)} require --gpu-tier to be set.")
