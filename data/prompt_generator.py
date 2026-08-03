@@ -17,10 +17,10 @@ from data.constants import (
 from model.base import Model
 
 
-def seed_count(num_samples: int) -> int:
+def seed_count(num_samples: int, breadth_exponent: float = BREADTH_EXPONENT) -> int:
     """Breadth: number of distinct seed topics for `num_samples`
-    (ceil(N ** BREADTH_EXPONENT), clamped to [1, num_samples])."""
-    return max(1, min(num_samples, math.ceil(num_samples ** BREADTH_EXPONENT)))
+    (ceil(N ** breadth_exponent), clamped to [1, num_samples])."""
+    return max(1, min(num_samples, math.ceil(num_samples ** breadth_exponent)))
 
 
 class GeneratedPrompts(BaseModel):

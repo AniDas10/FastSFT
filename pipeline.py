@@ -1,13 +1,9 @@
 """Top-level DistillationPipeline: DataGenerator -> DataFormatter -> FineTuner."""
 
-from typing import Any, Iterator, List, Tuple
+from typing import Any, Iterator, List, Optional, Tuple
 
-from constants import (
-    DEFAULT_CHILD_MODEL_ID,
-    DEFAULT_GUIDE_MODEL,
-    DEFAULT_JUDGE_MODEL,
-    DEFAULT_PARENT_MODEL,
-)
+from constants import DEFAULT_CHILD_MODEL_ID
+from data.config import DataGenerationConfig
 from stages.base import Stage
 from stages.constants import (
     DATA_FORMATTER,
@@ -19,6 +15,7 @@ from stages.constants import (
 from stages.data_formatter import DataFormatter
 from stages.data_generator import DataGenerator
 from stages.fine_tuner import FineTuner
+from training.config import TrainingConfig
 
 
 class DistillationPipeline:
@@ -35,10 +32,8 @@ class DistillationPipeline:
     def __init__(
         self,
         child_model_id: str = DEFAULT_CHILD_MODEL_ID,
-        guide_model: str = DEFAULT_GUIDE_MODEL,
-        parent_model: str = DEFAULT_PARENT_MODEL,
-        judge_model: str = DEFAULT_JUDGE_MODEL,
-        num_samples: int = 100,
+        generation: Optional[DataGenerationConfig] = None,
+        training: Optional[TrainingConfig] = None,
         start_stage: str = STAGE_ORDER[0],
         verbose: bool = True,
     ):
@@ -48,10 +43,8 @@ class DistillationPipeline:
 
         self.stages: List[Stage] = self._build_stages(
             child_model_id=child_model_id,
-            guide_model=guide_model,
-            parent_model=parent_model,
-            judge_model=judge_model,
-            num_samples=num_samples,
+            generation=generation or DataGenerationConfig(),
+            training=training,
             verbose=verbose,
         )
 
@@ -64,26 +57,30 @@ class DistillationPipeline:
     def _build_stages(
         self,
         child_model_id: str,
-        guide_model: str,
-        parent_model: str,
-        judge_model: str,
-        num_samples: int,
+        generation: DataGenerationConfig,
+        training: Optional[TrainingConfig],
         verbose: bool,
     ) -> List[Stage]:
         """Builds only the stages from self._start_index onward."""
         factories = {
             DATA_GENERATOR: lambda: DataGenerator(
-                guide_model=guide_model,
-                parent_model=parent_model,
-                judge_model=judge_model,
-                num_samples=num_samples,
+                guide_model=generation.guide_model,
+                parent_model=generation.parent_model,
+                judge_model=generation.judge_model,
+                num_samples=generation.num_samples,
+                breadth_exponent=generation.breadth_exponent,
+                score_threshold=generation.score_threshold,
+                parent_temperature=generation.parent_generation.temperature,
+                parent_max_tokens=generation.parent_generation.max_tokens,
                 verbose=verbose,
             ),
             DATA_FORMATTER: lambda: DataFormatter(
                 child_model_id=child_model_id, verbose=verbose
             ),
             FINE_TUNER: lambda: FineTuner(
-                child_model_id=child_model_id, verbose=verbose
+                child_model_id=child_model_id,
+                training_config=training,
+                verbose=verbose,
             ),
         }
         return [factories[name]() for name in STAGE_ORDER[self._start_index:]]
