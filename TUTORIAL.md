@@ -1,0 +1,231 @@
+# FastSFT — Tutorial
+
+**Turn one sentence into a fine-tuned model.**
+
+You describe the assistant you want ("a pirate-themed customer support bot").
+FastSFT uses a big, smart "parent" model to generate a training dataset in
+that style, quality-checks it with a judge model, and fine-tunes a small
+"child" model on it — so you walk away with a tiny model that talks like the
+big one, for a fraction of the size and cost.
+
+This guide gets you from zero to a trained model in about 15 minutes. It's
+written for a hackathon: copy-paste commands, short explanations, and the
+shortcuts that matter when the clock is running.
+
+---
+
+## 1. The one-minute mental model
+
+```
+your prompt  ──▶  DataGenerator  ──▶  DataFormatter  ──▶  FineTuner  ──▶  trained model
+"a pirate         (parent model      (renders it into    (LoRA fine-      (in modelsets/)
+ support bot"      writes + judge      the child model's   tuning on your
+                   filters data)       chat format)        machine or cloud)
+```
+
+Three stages run in order. Each one saves its output to disk the moment it
+finishes, so if something breaks late, you never lose the earlier work.
+
+| Stage | What goes in | What comes out |
+|-------|-------------|----------------|
+| **DataGenerator** | your prompt | a quality-filtered dataset of Q&A pairs |
+| **DataFormatter** | that dataset | the same data, formatted for your target model |
+| **FineTuner** | formatted data | a fine-tuned adapter (your model!) |
+
+You mostly just run one command and these happen automatically.
+
+---
+
+## 2. Setup (do this once)
+
+You need **Python 3.12** and [`uv`](https://github.com/astral-sh/uv) (a fast
+Python package manager — `curl -LsSf https://astral.sh/uv/install.sh | sh`).
+
+**a) Get an OpenRouter key.** FastSFT calls big models through
+[OpenRouter](https://openrouter.ai) (one key, many models). Sign up, grab an
+API key, and drop it in a `.env` file in the project root:
+
+```bash
+echo "OPENROUTER_API_KEY=sk-or-your-key-here" > .env
+```
+
+**b) Install dependencies.**
+
+```bash
+uv sync                              # core install (data generation)
+uv sync --extra local-training       # add this to train on your own machine
+```
+
+That's it for the local path. (Training on cloud GPUs via Modal is optional —
+see §7.)
+
+---
+
+## 3. Your first run
+
+```bash
+uv run main.py "a pirate-themed customer support chatbot" \
+  --num-samples 20 \
+  --child-model-id "Qwen/Qwen2.5-0.5B-Instruct" \
+  --local --max-epochs 1
+```
+
+What each part means:
+
+- `"a pirate-themed customer support chatbot"` — describe the *style and
+  domain* you want. Be specific; the parent model takes this literally.
+- `--num-samples 20` — how many training examples to generate. Start small
+  (20–50) so you can iterate fast, then scale up.
+- `--child-model-id` — the small model you're fine-tuning, as a
+  [Hugging Face](https://huggingface.co) repo id. `Qwen2.5-0.5B-Instruct` is a
+  great hackathon default: tiny, fast, and trains on a laptop.
+- `--local` — train on *this* machine instead of the cloud. Perfect for a demo.
+- `--max-epochs 1` — a ceiling on training passes (it stops early on its own).
+  Keep it low for a quick first run.
+
+When it finishes, your model lands in `modelsets/<timestamp>/` as a LoRA
+adapter (`adapter_config.json` + `adapter_model.safetensors`).
+
+> **Tip:** the very first run downloads the child model's weights, so give it a
+> minute. Later runs reuse the cache.
+
+---
+
+## 4. Look at what it made
+
+Never trust a dataset you haven't eyeballed. Preview the latest run:
+
+```bash
+uv run python -m data.viewer               # the raw generated Q&A
+uv run python -m data.viewer --formatted   # the same data, chat-formatted
+```
+
+You'll see the parent model's questions and pirate-flavored answers in a nice
+terminal panel. If the style is off, tweak your prompt and regenerate — this is
+the fastest, cheapest thing to iterate on.
+
+---
+
+## 5. What's happening under the hood (optional)
+
+You don't need this to use FastSFT, but it helps when you're demoing to judges.
+
+**DataGenerator** does four things:
+
+1. **Guide** — a small model reads your prompt and writes the *instructions*
+   for everyone else: how the parent should answer, how the judge should
+   score, and a list of diverse seed topics so your data isn't repetitive.
+2. **PromptGenerator** — expands those seeds into `--num-samples` user
+   questions, spanning simple to complex.
+3. **ResponseGenerator** — the parent model answers each question *in your
+   style*.
+4. **DataRefiner** — the judge model scores every answer 0–10, throws out the
+   weak ones, and regenerates them. That's your quality filter.
+
+**DataFormatter** renders each Q&A into the exact chat format your child model
+expects (using its own tokenizer's chat template).
+
+**FineTuner** runs [LoRA](https://arxiv.org/abs/2106.09685) fine-tuning — it
+trains a small set of adapter weights instead of the whole model, which is why
+it's fast and fits in modest memory. It holds out a slice of your data for
+validation and stops training automatically when it stops improving.
+
+---
+
+## 6. Knobs worth turning at a hackathon
+
+| Flag | Why you'd use it |
+|------|------------------|
+| `--num-samples 100` | More data = better model. Bump it up once your style looks right. |
+| `--child-model-id ...` | Pick your target model. Must be an *instruct/chat* model, not a base model. |
+| `--parent-model ...` | The model writing your data. Default is Llama 3.3 70B; swap for cheaper/faster. |
+| `--score-threshold 7` | Raise the quality bar (0–10). Higher = stricter filtering, fewer but better samples. |
+| `--max-epochs 3` | Let it train longer for a tiny dataset. |
+| `--lora-rank 32` | Bigger adapter = more capacity to learn (needs `--local` or `--gpu-tier`). |
+
+Run `uv run main.py --help` to see every flag.
+
+> **Gotcha:** the parent model must be **open-weight** (FastSFT checks this).
+> Closed models' terms of service usually forbid training on their outputs, so
+> FastSFT refuses them with a clear error. The defaults are all fine.
+
+---
+
+## 7. Training on cloud GPUs (when your laptop isn't enough)
+
+If your child model is too big to train locally, FastSFT can dispatch training
+to [Modal](https://modal.com) (pay-per-second cloud GPUs):
+
+```bash
+modal token new          # authenticate once
+uv run main.py "..." --num-samples 100   # no --local → trains on Modal
+```
+
+Without `--gpu-tier`, FastSFT runs a **cost heuristic**: it estimates each GPU
+tier's memory need from your model's real size and your data's real length,
+then picks the *cheapest tier that fits*. Want to preview that before spending
+anything?
+
+```bash
+uv run python -m training.heuristic Qwen/Qwen2.5-0.5B-Instruct
+```
+
+This prints a plain-English explanation of every training knob plus a
+cost-ranked shortlist — a great sanity check before a real run.
+
+To force a specific GPU: `--gpu-tier A100-40GB`.
+
+---
+
+## 8. Restarting from the middle
+
+Because every stage saves its output, you can re-run just the parts you need
+instead of regenerating data every time:
+
+```bash
+# reuse an existing dataset, just re-format + re-train
+uv run main.py --start-stage data_formatter --input-path datasets/raw/<timestamp>
+
+# reuse formatted data, just re-train (e.g. try a higher LoRA rank)
+uv run main.py --start-stage fine_tuner --input-path datasets/formatted/<timestamp> \
+  --local --lora-rank 32
+```
+
+Data generation is the slow, expensive part (lots of API calls). Once you've
+got a dataset you like, iterate on training from `--start-stage fine_tuner` and
+you'll move much faster.
+
+---
+
+## 9. Hackathon playbook
+
+A battle-tested order of operations when you're short on time:
+
+1. **Prove the loop first.** Run §3 with `--num-samples 10 --local
+   --max-epochs 1`. Get *a* model out end-to-end before optimizing anything.
+2. **Fix the style, cheaply.** Iterate on your prompt + `--score-threshold`,
+   checking `data.viewer` each time. Don't train while doing this.
+3. **Scale the data.** Once the generated answers look right, bump
+   `--num-samples` to 100+.
+4. **Train for real.** Re-run from `--start-stage fine_tuner` with a couple
+   epochs. Save the earlier stages' work.
+5. **Demo it.** Load the adapter from `modelsets/<timestamp>/` with
+   `transformers` + `peft` and show your tiny model doing the thing.
+
+---
+
+## 10. When something breaks
+
+| Symptom | Fix |
+|---------|-----|
+| `No OpenRouter API key found` | Create `.env` with `OPENROUTER_API_KEY=...` (§2). |
+| `... has no chat_template` | Your `--child-model-id` is a base model. Use an `-Instruct`/`-Chat` version. |
+| `... has no hugging_face_id` | Your `--parent-model` is closed-weight. Use an open one (the default is fine). |
+| `--strategy qlora requires CUDA` | QLoRA needs an NVIDIA GPU. Use plain `lora` locally, or train on Modal. |
+| `modal.AuthError` | Run `modal token new`, or add `--local` to skip the cloud. |
+| Structured-output / empty-response errors | The guide/judge model needs tool-call support. Stick to the defaults. |
+
+---
+
+**That's the whole tool.** Describe a model, generate data, fine-tune, demo.
+Now go build something. 🏴‍☠️

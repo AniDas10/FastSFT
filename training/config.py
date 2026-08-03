@@ -1,7 +1,6 @@
 """Fine-tuning configuration: adapter shape, training loop, and Modal job envelope."""
 
 from dataclasses import dataclass, field
-from typing import List
 
 from training.constants import (
     DEFAULT_BATCH_SIZE,
@@ -25,7 +24,7 @@ class AdapterConfig:
     (see TrainingConfig.strategy for that)."""
 
     rank: int = DEFAULT_LORA_RANK
-    target_modules: List[str] = field(default_factory=lambda: list(LORA_TARGET_MODULES))
+    target_modules: list[str] = field(default_factory=lambda: list(LORA_TARGET_MODULES))
     dropout: float = DEFAULT_LORA_DROPOUT
 
 

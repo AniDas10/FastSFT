@@ -2,7 +2,6 @@
 
 import argparse
 from datetime import datetime
-from typing import Optional
 
 from distilabel.distiset import Distiset
 
@@ -12,10 +11,12 @@ from stages.constants import STAGE_ORDER
 
 def current_timestamp() -> str:
     """Current time formatted as RUN_TIMESTAMP_FORMAT."""
-    return datetime.now().strftime(RUN_TIMESTAMP_FORMAT)
+    # Local (naive) time on purpose: these timestamps name run folders for a
+    # human to read, not to compare across timezones.
+    return datetime.now().strftime(RUN_TIMESTAMP_FORMAT)  # noqa: DTZ005
 
 
-def load_data(path: Optional[str]) -> Optional[Distiset]:
+def load_data(path: str | None) -> Distiset | None:
     """Loads a saved Distiset from `path`, or None if no path was given."""
     return Distiset.load_from_disk(path) if path else None
 
@@ -41,11 +42,19 @@ def validate_start_stage(args: argparse.Namespace, parser: argparse.ArgumentPars
 
 
 def validate_training_flags(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    """All the fine-tuning override flags are only meaningful alongside
-    --gpu-tier (which opts out of the cost heuristic); using one without it
-    is likely a mistake, not a silent no-op.
+    """--gpu-tier (dispatch to Modal) and --local (train on this machine) are
+    mutually exclusive training destinations. The adapter/loop override flags
+    are only meaningful alongside one of them -- using one without either is
+    likely a mistake, not a silent no-op. --modal-timeout is Modal-specific,
+    so it requires --gpu-tier specifically (not satisfied by --local alone).
     """
-    if args.gpu_tier is not None:
+    if args.gpu_tier is not None and args.local:
+        parser.error("--gpu-tier and --local are mutually exclusive.")
+
+    if args.modal_timeout is not None and args.gpu_tier is None:
+        parser.error("--modal-timeout requires --gpu-tier to be set.")
+
+    if args.gpu_tier is not None or args.local:
         return
     other_flags = {
         "--strategy": args.strategy,
@@ -63,4 +72,4 @@ def validate_training_flags(args: argparse.Namespace, parser: argparse.ArgumentP
     }
     given = [name for name, value in other_flags.items() if value is not None]
     if given:
-        parser.error(f"{', '.join(given)} require --gpu-tier to be set.")
+        parser.error(f"{', '.join(given)} require --gpu-tier or --local to be set.")

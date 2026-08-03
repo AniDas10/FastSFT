@@ -1,6 +1,5 @@
 """LLM-as-judge model, usable standalone at any pipeline stage."""
 
-from typing import Dict, List, Optional
 
 from pydantic import BaseModel
 
@@ -24,7 +23,7 @@ class Judge(Model):
     def __init__(
         self,
         model_id: str = DEFAULT_JUDGE_MODEL,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         temperature: float = 0.0,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ):
@@ -33,8 +32,8 @@ class Judge(Model):
         )
 
     def score_samples(
-        self, samples: Dict[str, str], prompt: Optional[str] = None
-    ) -> Dict[str, float]:
+        self, samples: dict[str, str], prompt: str | None = None
+    ) -> dict[str, float]:
         """Scores each sample in `samples` (id -> text). Returns id -> score."""
         instruction = prompt if prompt is not None else self.get_instruction()
         data = [{"id": id_, "instruction": text} for id_, text in samples.items()]
@@ -52,7 +51,7 @@ class Judge(Model):
         return scores
 
     def failed_sample_count(
-        self, scores: List[float], threshold: float = DEFAULT_SCORE_THRESHOLD
+        self, scores: list[float], threshold: float = DEFAULT_SCORE_THRESHOLD
     ) -> int:
         """Returns how many of `scores` fall below `threshold`."""
         return sum(1 for score in scores if score < threshold)

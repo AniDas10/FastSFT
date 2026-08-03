@@ -4,7 +4,6 @@ import warnings_filter  # noqa: F401
 
 import argparse
 import os
-from typing import Optional
 
 from rich.console import Console
 from rich.panel import Panel
@@ -42,7 +41,7 @@ def _latest_run_path(base_dir: str) -> str:
 class DataViewer:
     """Loads a saved `Distiset` and previews samples."""
 
-    def __init__(self, path: Optional[str] = None, kind: str = "raw"):
+    def __init__(self, path: str | None = None, kind: str = "raw"):
         if path is None:
             subdir = FORMATTED_OUTPUT_SUBDIR if kind == "formatted" else RAW_OUTPUT_SUBDIR
             path = _latest_run_path(os.path.join(DEFAULT_OUTPUT_DIR, subdir))

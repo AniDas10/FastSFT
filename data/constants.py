@@ -1,5 +1,13 @@
 """Constants for the data package (synthetic-data generation and refinement)."""
 
+# Default dataset size when the caller doesn't specify.
+DEFAULT_NUM_SAMPLES = 100
+
+# Default sampling temperature for the parent model's generations -- high, to
+# keep the synthetic dataset varied. (The Model base class's own default is
+# separate; the model layer can't depend on data/ without inverting the layers.)
+DEFAULT_PARENT_TEMPERATURE = 0.9
+
 # Breadth (distinct seed topics) = ceil(N ** BREADTH_EXPONENT); >0.5 favors
 # breadth over depth (breadth:depth = N^exp : N^(1-exp)).
 BREADTH_EXPONENT = 2 / 3

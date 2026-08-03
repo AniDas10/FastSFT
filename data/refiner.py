@@ -1,6 +1,5 @@
 """Refines a Distiset by regenerating samples that fail the judge's quality bar."""
 
-from typing import List, Tuple
 
 from datasets import Dataset, DatasetDict, concatenate_datasets
 from distilabel.distiset import Distiset
@@ -40,15 +39,15 @@ class DataRefiner:
 
         return Distiset({"default": DatasetDict({"train": train})})
 
-    def _score(self, train: Dataset) -> List[float]:
+    def _score(self, train: Dataset) -> list[float]:
         """Scores every row in `train`, returned aligned to row order."""
         samples = {str(i): row["generation"] for i, row in enumerate(train)}
         scores_by_id = self.judge_model.score_samples(samples)
         return [scores_by_id[str(i)] for i in range(len(train))]
 
     def _failed_instructions(
-        self, train: Dataset, scores: List[float], threshold: float
-    ) -> List[str]:
+        self, train: Dataset, scores: list[float], threshold: float
+    ) -> list[str]:
         """Instructions of the rows scoring below `threshold`."""
         return [
             train[i]["instruction"]
@@ -57,14 +56,14 @@ class DataRefiner:
         ]
 
     def _drop_failed(
-        self, train: Dataset, scores: List[float], threshold: float
-    ) -> Tuple[Dataset, List[float]]:
+        self, train: Dataset, scores: list[float], threshold: float
+    ) -> tuple[Dataset, list[float]]:
         """Returns `train` and `scores` with every row scoring below
         `threshold` removed, kept in alignment."""
         keep_indices = [i for i in range(len(train)) if scores[i] >= threshold]
         return train.select(keep_indices), [scores[i] for i in keep_indices]
 
-    def _regenerate(self, instructions: List[str]) -> Dataset:
+    def _regenerate(self, instructions: list[str]) -> Dataset:
         """Generates fresh answers for `instructions`."""
         replacements = ResponseGenerator(model=self.parent_model).generate(
             instructions

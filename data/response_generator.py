@@ -1,6 +1,5 @@
 """Generates the assistant answers for a set of instructions."""
 
-from typing import List, Optional
 
 from distilabel.distiset import Distiset
 
@@ -12,10 +11,10 @@ class ResponseGenerator:
     one API call per instruction (not the `n` param, which many providers ignore).
     """
 
-    def __init__(self, model: Optional[Model] = None):
+    def __init__(self, model: Model | None = None):
         self._model = model or Model()
 
-    def generate(self, instructions: List[str]) -> Distiset:
+    def generate(self, instructions: list[str]) -> Distiset:
         data = [{"instruction": instruction} for instruction in instructions]
         return self._model.run_pipeline(
             data, self._model.get_instruction(), name="response-generation"
