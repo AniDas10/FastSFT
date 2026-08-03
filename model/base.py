@@ -6,7 +6,6 @@ import logging
 import os
 from functools import lru_cache
 from logging.handlers import QueueHandler
-from typing import List, Optional
 
 import requests
 from distilabel.distiset import Distiset
@@ -63,7 +62,7 @@ class Model:
     def __init__(
         self,
         model_id: str = DEFAULT_PARENT_MODEL,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         temperature: float = 0.9,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ):
@@ -75,7 +74,7 @@ class Model:
             )
         self._temperature = temperature
         self._max_tokens = max_tokens
-        self._custom_instruction: Optional[str] = None
+        self._custom_instruction: str | None = None
         self._open_weight_verified = False
 
     def _ensure_open_weight(self) -> None:
@@ -114,7 +113,7 @@ class Model:
         return self._instruction()
 
     def assert_structured_output(
-        self, generation: Optional[str], sample_id: Optional[str] = None
+        self, generation: str | None, sample_id: str | None = None
     ) -> str:
         """Raises a clear error if a structured-output call returned nothing."""
         if not generation:
@@ -127,7 +126,7 @@ class Model:
             )
         return generation
 
-    def build_llm(self, structured_output: Optional[dict] = None) -> OpenAILLM:
+    def build_llm(self, structured_output: dict | None = None) -> OpenAILLM:
         self._ensure_open_weight()
         return OpenAILLM(
             model=self.model_id,
@@ -142,9 +141,9 @@ class Model:
 
     def run_pipeline(
         self,
-        data: List[dict],
+        data: list[dict],
         system_prompt: str,
-        structured_output: Optional[dict] = None,
+        structured_output: dict | None = None,
         name: str = "pipeline",
     ) -> Distiset:
         """Runs a single-step LoadDataFromDicts -> TextGeneration pipeline over `data`."""

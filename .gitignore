@@ -3,4 +3,4 @@
 __pycache__/
 *.pyc
 datasets/
-models/
+modelsets/

@@ -1,4 +1,5 @@
-"""FineTuner mini-pipeline: LoRA/QLoRA SFT on the child model, dispatched to Modal."""
+"""FineTuner mini-pipeline: LoRA/QLoRA SFT on the child model, dispatched to
+Modal, or trained locally via --local."""
 
 import os
 import shutil
@@ -6,26 +7,27 @@ import tarfile
 import tempfile
 import uuid
 from dataclasses import asdict
-from typing import Optional
 
 from distilabel.distiset import Distiset
 
-from constants import MODELS_OUTPUT_DIR
+from constants import MODELSETS_OUTPUT_DIR
 from stages.base import Stage
 from stages.constants import FINE_TUNER
-from training.config import TrainingConfig
+from training.config import AdapterConfig, TrainingConfig, TrainingLoopConfig
 from training.constants import TOP_N_CONFIGS
 from training.heuristic import recommend_configs
 from training.modal_app import adapter_volume, train_lora
 
 
 class FineTuner(Stage):
-    """Fine-tunes the child model via LoRA/QLoRA SFT, dispatched to Modal.
+    """Fine-tunes the child model via LoRA/QLoRA SFT, on Modal or locally.
 
-    Uses `training_config` if the caller supplies one; otherwise ranks
-    candidates by cost/feasibility (see training.heuristic) and takes the
-    cheapest feasible one. Either way, carves a validation split for early
-    stopping and dispatches training to a Modal GPU container.
+    Uses `training_config` if the caller supplies one; otherwise, if
+    `local_training`, trains on this machine with default adapter/loop
+    settings (no Modal-tier cost heuristic -- there's only one "tier": this
+    machine); otherwise ranks Modal GPU tier candidates by cost/feasibility
+    (see training.heuristic) and takes the cheapest feasible one. Either
+    way, carves a validation split for early stopping first.
     """
 
     name = FINE_TUNER
@@ -33,12 +35,14 @@ class FineTuner(Stage):
     def __init__(
         self,
         child_model_id: str,
-        training_config: Optional[TrainingConfig] = None,
+        training_config: TrainingConfig | None = None,
+        local_training: bool = False,
         verbose: bool = True,
     ):
         super().__init__(verbose=verbose)
         self._child_model_id = child_model_id
         self._training_config = training_config
+        self._local_training = local_training
 
     def _validate_input(self, formatted_distiset: Distiset) -> None:
         train = formatted_distiset["default"]["train"]
@@ -62,6 +66,11 @@ class FineTuner(Stage):
             f"({chosen.loop.validation_split:.0%} held out)."
         )
 
+        if self._local_training:
+            return self._run_local(chosen, train_ds, eval_ds)
+        return self._run_modal(chosen, train_ds, eval_ds)
+
+    def _run_modal(self, chosen: TrainingConfig, train_ds, eval_ds) -> str:
         self._log(f"[2/3] Dispatching training to Modal ({chosen.gpu_tier})...")
         job_id = uuid.uuid4().hex[:12]
         tar_path = train_lora.with_options(
@@ -78,11 +87,24 @@ class FineTuner(Stage):
         self._log("[3/3] Downloading trained adapter...")
         adapter_dir = self._download_adapter(tar_path)
         self._log(f"[3/3] Done: adapter downloaded to '{adapter_dir}'.")
+        return adapter_dir
 
+    def _run_local(self, chosen: TrainingConfig, train_ds, eval_ds) -> str:
+        from training.local_trainer import train_locally
+
+        self._log(f"[2/3] Training locally ({chosen.gpu_tier})...")
+        adapter_dir = train_locally(
+            child_model_id=self._child_model_id,
+            train_rows=train_ds.to_list(),
+            eval_rows=eval_ds.to_list(),
+            config=asdict(chosen),
+        )
+        self._log(f"[2/3] Done: adapter saved to '{adapter_dir}'.")
         return adapter_dir
 
     def _resolve_training_config(self, formatted_distiset: Distiset) -> TrainingConfig:
-        """Uses the caller-supplied TrainingConfig if given; otherwise ranks
+        """Uses the caller-supplied TrainingConfig if given; otherwise, for
+        local training, defaults (no Modal tier to rank); otherwise ranks
         candidates via the cost heuristic and takes the cheapest feasible one."""
         if self._training_config is not None:
             self._log(
@@ -91,6 +113,17 @@ class FineTuner(Stage):
                 f"{self._training_config.strategy}."
             )
             return self._training_config
+
+        if self._local_training:
+            from training.local_trainer import detect_device
+
+            device = detect_device()
+            self._log(f"[1/3] Training locally on detected device: {device}.")
+            return TrainingConfig(
+                gpu_tier=f"local ({device})",
+                adapter=AdapterConfig(),
+                loop=TrainingLoopConfig(),
+            )
 
         self._log("[1/3] Ranking candidate training configs...")
         sample_texts = [row["text"] for row in formatted_distiset["default"]["train"]]
@@ -112,8 +145,8 @@ class FineTuner(Stage):
 
     def save_output(self, output: str, run_id: str) -> str:
         """Copies the downloaded adapter directory into
-        MODELS_OUTPUT_DIR/run_id and returns that path."""
-        destination = os.path.join(MODELS_OUTPUT_DIR, run_id)
+        MODELSETS_OUTPUT_DIR/run_id and returns that path."""
+        destination = os.path.join(MODELSETS_OUTPUT_DIR, run_id)
         shutil.copytree(output, destination, dirs_exist_ok=True)
         return destination
 
@@ -127,8 +160,8 @@ class FineTuner(Stage):
     def _download_adapter(self, tar_path: str) -> str:
         """Downloads the trained adapter tarball from the Modal Volume and
         extracts it to a local temp directory; returns that path."""
-        local_tar_path = tempfile.mktemp(suffix=".tar.gz")
-        with open(local_tar_path, "wb") as f:
+        fd, local_tar_path = tempfile.mkstemp(suffix=".tar.gz")
+        with os.fdopen(fd, "wb") as f:
             for chunk in adapter_volume.read_file(tar_path):
                 f.write(chunk)
 

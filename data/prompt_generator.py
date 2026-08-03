@@ -5,7 +5,6 @@ Seeds provide breadth (distinct topics); each seed is expanded into depth
 """
 
 import math
-from typing import List, Tuple
 
 from pydantic import BaseModel
 
@@ -24,7 +23,7 @@ def seed_count(num_samples: int, breadth_exponent: float = BREADTH_EXPONENT) -> 
 
 
 class GeneratedPrompts(BaseModel):
-    prompts: List[str]
+    prompts: list[str]
 
 
 class PromptGenerator:
@@ -37,14 +36,14 @@ class PromptGenerator:
         self._model = model
         self._num_samples = num_samples
 
-    def generate(self, seeds: List[str]) -> List[str]:
+    def generate(self, seeds: list[str]) -> list[str]:
         """Returns exactly `num_samples` instructions spread across `seeds`."""
         if not seeds:
             raise ValueError("PromptGenerator.generate() requires at least one seed.")
 
         # Each row is capped at its requested count, so a pass yields at most
         # the deficit -- top up whatever a model under-delivers.
-        prompts: List[str] = []
+        prompts: list[str] = []
         for _ in range(MAX_PROMPT_ATTEMPTS):
             deficit = self._num_samples - len(prompts)
             if deficit == 0:
@@ -57,7 +56,7 @@ class PromptGenerator:
             )
         return prompts
 
-    def _generate(self, allocation: List[Tuple[str, int]]) -> List[str]:
+    def _generate(self, allocation: list[tuple[str, int]]) -> list[str]:
         """Generates the capped prompts for one (seed, count) allocation."""
         data = [
             {"instruction": self._row_prompt(seed, count), "count": count}
@@ -70,14 +69,14 @@ class PromptGenerator:
             name="prompt-generation",
         )
 
-        prompts: List[str] = []
+        prompts: list[str] = []
         for row in distiset["default"]["train"]:
             generation = self._model.assert_structured_output(row["generation"])
             parsed = GeneratedPrompts.model_validate_json(generation)
             prompts.extend(parsed.prompts[: row["count"]])
         return prompts
 
-    def _allocate(self, seeds: List[str], n: int) -> List[Tuple[str, int]]:
+    def _allocate(self, seeds: list[str], n: int) -> list[tuple[str, int]]:
         """Distributes `n` instructions as evenly as possible across `seeds`,
         dropping any seed that would get zero."""
         base, extra = divmod(n, len(seeds))

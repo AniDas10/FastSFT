@@ -1,6 +1,7 @@
 """Top-level DistillationPipeline: DataGenerator -> DataFormatter -> FineTuner."""
 
-from typing import Any, Iterator, List, Optional, Tuple
+from collections.abc import Iterator
+from typing import Any
 
 from constants import DEFAULT_CHILD_MODEL_ID
 from data.config import DataGenerationConfig
@@ -32,8 +33,9 @@ class DistillationPipeline:
     def __init__(
         self,
         child_model_id: str = DEFAULT_CHILD_MODEL_ID,
-        generation: Optional[DataGenerationConfig] = None,
-        training: Optional[TrainingConfig] = None,
+        generation: DataGenerationConfig | None = None,
+        training: TrainingConfig | None = None,
+        local_training: bool = False,
         start_stage: str = STAGE_ORDER[0],
         verbose: bool = True,
     ):
@@ -41,10 +43,11 @@ class DistillationPipeline:
         self.start_stage = start_stage
         self._start_index = STAGE_ORDER.index(start_stage)
 
-        self.stages: List[Stage] = self._build_stages(
+        self.stages: list[Stage] = self._build_stages(
             child_model_id=child_model_id,
             generation=generation or DataGenerationConfig(),
             training=training,
+            local_training=local_training,
             verbose=verbose,
         )
 
@@ -58,9 +61,10 @@ class DistillationPipeline:
         self,
         child_model_id: str,
         generation: DataGenerationConfig,
-        training: Optional[TrainingConfig],
+        training: TrainingConfig | None,
+        local_training: bool,
         verbose: bool,
-    ) -> List[Stage]:
+    ) -> list[Stage]:
         """Builds only the stages from self._start_index onward."""
         factories = {
             DATA_GENERATOR: lambda: DataGenerator(
@@ -80,12 +84,13 @@ class DistillationPipeline:
             FINE_TUNER: lambda: FineTuner(
                 child_model_id=child_model_id,
                 training_config=training,
+                local_training=local_training,
                 verbose=verbose,
             ),
         }
         return [factories[name]() for name in STAGE_ORDER[self._start_index:]]
 
-    def run(self, data: Any) -> Iterator[Tuple[Stage, Any]]:
+    def run(self, data: Any) -> Iterator[tuple[Stage, Any]]:
         """Yields (stage, output) as each stage completes. Validates the input
         eagerly, before any stage runs."""
         if data is None:
@@ -95,7 +100,7 @@ class DistillationPipeline:
             )
         return self._run_stages(data)
 
-    def _run_stages(self, data: Any) -> Iterator[Tuple[Stage, Any]]:
+    def _run_stages(self, data: Any) -> Iterator[tuple[Stage, Any]]:
         for stage in self.stages:
             data = stage.run(data)
             yield stage, data

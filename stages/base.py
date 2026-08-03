@@ -1,7 +1,7 @@
 """Shared base for DistillationPipeline's mini-pipeline stages."""
 
 import os
-from typing import Any, Optional
+from typing import Any
 
 from distilabel.distiset import Distiset
 
@@ -51,7 +51,7 @@ class Stage:
         self._validate_input(data)
         return self._run(data)
 
-    def save_output(self, output: Any, run_id: str) -> Optional[str]:
+    def save_output(self, output: Any, run_id: str) -> str | None:
         """Persists this stage's output; returns the path, or None if there's
         nothing to persist. Overridden by stages that produce a saved artifact."""
         return None

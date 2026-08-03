@@ -1,6 +1,5 @@
 """Turns a freeform user request into tailored parent/judge instructions."""
 
-from typing import List, Optional
 
 from pydantic import BaseModel
 
@@ -12,7 +11,7 @@ from model.constants import DEFAULT_GUIDE_INSTRUCTION, DEFAULT_MAX_TOKENS
 class GuideInstructions(BaseModel):
     parent_instruction: str
     judge_instruction: str
-    sample_instructions: List[str]
+    sample_instructions: list[str]
 
 
 class Guide(Model):
@@ -26,7 +25,7 @@ class Guide(Model):
     def __init__(
         self,
         model_id: str = DEFAULT_GUIDE_MODEL,
-        api_key: Optional[str] = None,
+        api_key: str | None = None,
         temperature: float = 0.7,
         max_tokens: int = DEFAULT_MAX_TOKENS,
     ):

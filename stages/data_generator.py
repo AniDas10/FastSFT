@@ -9,7 +9,12 @@ from constants import (
     DEFAULT_PARENT_MODEL,
     RAW_OUTPUT_SUBDIR,
 )
-from data.constants import BREADTH_EXPONENT, GUIDE_TOKENS_PER_SEED
+from data.constants import (
+    BREADTH_EXPONENT,
+    DEFAULT_NUM_SAMPLES,
+    DEFAULT_PARENT_TEMPERATURE,
+    GUIDE_TOKENS_PER_SEED,
+)
 from data.prompt_generator import PromptGenerator, seed_count
 from data.refiner import DataRefiner
 from data.response_generator import ResponseGenerator
@@ -35,10 +40,10 @@ class DataGenerator(Stage):
         guide_model: str = DEFAULT_GUIDE_MODEL,
         parent_model: str = DEFAULT_PARENT_MODEL,
         judge_model: str = DEFAULT_JUDGE_MODEL,
-        num_samples: int = 100,
+        num_samples: int = DEFAULT_NUM_SAMPLES,
         breadth_exponent: float = BREADTH_EXPONENT,
         score_threshold: float = DEFAULT_SCORE_THRESHOLD,
-        parent_temperature: float = 0.9,
+        parent_temperature: float = DEFAULT_PARENT_TEMPERATURE,
         parent_max_tokens: int = DEFAULT_MAX_TOKENS,
         verbose: bool = True,
     ):

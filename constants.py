@@ -7,7 +7,7 @@ tuning in data/constants.py.
 DEFAULT_OUTPUT_DIR = "datasets"
 RAW_OUTPUT_SUBDIR = "raw"
 FORMATTED_OUTPUT_SUBDIR = "formatted"
-MODELS_OUTPUT_DIR = "models"
+MODELSETS_OUTPUT_DIR = "modelsets"
 RUN_TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 
 DEFAULT_PARENT_MODEL = "meta-llama/llama-3.3-70b-instruct"

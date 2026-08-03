@@ -1,5 +1,5 @@
 [project]
-name = "llm-distillator"
+name = "fastsft"
 version = "0.1.0"
 description = "A CLI tool that distills a large LLM into a small one via synthetic-data generation, quality filtering, and fine-tuning."
 readme = "README.md"
@@ -15,6 +15,30 @@ dependencies = [
     "rich>=13.7.0",
     "transformers>=5.14.1",
 ]
+
+[project.optional-dependencies]
+# Only needed for `--local` (train on this machine instead of Modal):
+# `uv sync --extra local-training`. Kept out of the main dependency list so
+# Modal-only users keep a lean install. No `bitsandbytes` here -- it's
+# CUDA-first and QLoRA locally is only supported when CUDA is detected.
+local-training = ["torch", "peft", "trl", "accelerate"]
+
+[dependency-groups]
+# Pinned below 0.17 so the lint baseline is reproducible: ruff adds/changes
+# rules across minor releases, so an unpinned upgrade could surface new
+# findings on unchanged code. Bump deliberately, re-running `ruff check .`.
+dev = ["ruff>=0.16.1,<0.17"]
+
+[tool.ruff]
+# Matches requires-python; drives the pyupgrade (UP) rewrites' target syntax.
+target-version = "py312"
+
+[tool.ruff.lint]
+# Explicit rule set so the clean baseline doesn't depend on ruff's evolving
+# defaults. E4/E7/E9 + F is ruff's default; the rest are opt-ins this repo is
+# already clean against (isort, pyupgrade, bugbear, implicit-str-concat,
+# datetime-tz). E501 (line length) is intentionally omitted.
+select = ["E4", "E7", "E9", "F", "I", "B", "UP", "ISC", "DTZ"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["constants", "helper", "main", "pipeline", "data", "model", "stages", "training"]

@@ -1,4 +1,4 @@
-# LLM-Distillator
+# FastSFT
 
 A CLI tool that distills a large LLM into a small one via LoRA/QLoRA
 fine-tuning on [Modal](https://modal.com). Given a freeform description of
@@ -18,7 +18,10 @@ sequence, each independently usable and skippable via `start_stage`:
 1. **DataGenerator** — prompt in, quality-filtered raw dataset out.
 2. **DataFormatter** — raw dataset in, chat-template-rendered dataset out.
 3. **FineTuner** — formatted dataset in, fine-tuned LoRA/QLoRA adapter out,
-   trained remotely on Modal.
+   trained remotely on Modal, or locally on your own machine via `--local`.
+
+New here? [`TUTORIAL.md`](TUTORIAL.md) is a gentler, task-first walkthrough
+(zero to a trained model in ~15 minutes). This README is the reference.
 
 ## Quick start
 
@@ -39,11 +42,14 @@ uv run main.py --start-stage data_formatter --input-path datasets/raw/<timestamp
 
 # override the training config directly (skips the cost heuristic)
 uv run main.py "..." --gpu-tier A100-80GB --strategy qlora --lora-rank 32 --max-epochs 5
+
+# train locally instead of on Modal (needs `uv sync --extra local-training` once)
+uv run main.py "..." --local --max-epochs 2
 ```
 
 `main.py` saves each stage's output the moment it completes —
 `datasets/raw/<timestamp>/`, `datasets/formatted/<timestamp>/`,
-`models/<timestamp>/` — sharing one timestamp per run, so a later stage's
+`modelsets/<timestamp>/` — sharing one timestamp per run, so a later stage's
 failure never loses an earlier one's saved output.
 
 ## Stages
@@ -82,22 +88,28 @@ model ships no `chat_template` (e.g. a base model). Depends only on the
 
 ### FineTuner (`stages/fine_tuner.py`)
 
-`run(formatted_distiset) -> str` (path to the downloaded adapter). Three steps:
+`run(formatted_distiset) -> str` (path to the trained adapter). Three steps:
 
 1. **Resolve a `TrainingConfig`** — the caller-supplied one if given;
-   otherwise rank candidates by cost/feasibility via
-   `training.heuristic.recommend_configs` and take the cheapest feasible one
-   (logs the shortlist either way). The heuristic estimates memory/cost from
-   the child model's real parameter count (Hugging Face Hub metadata, no
+   otherwise, with `--local`, defaults (no Modal tier to rank — there's only
+   one "tier": this machine); otherwise rank candidates by cost/feasibility
+   via `training.heuristic.recommend_configs` and take the cheapest feasible
+   one (logs the shortlist either way). The heuristic estimates memory/cost
+   from the child model's real parameter count (Hugging Face Hub metadata, no
    weight download) and the dataset's real sequence lengths — it ranks by
    *feasibility*, never quality, which is only knowable empirically.
 2. **Split** a validation slice (`loop.validation_split`) from the formatted
    dataset for early stopping to monitor.
-3. **Dispatch to Modal** (`training/modal_app.py::train_lora`): loads the
+3. **Train** via the shared core (`training/trainer.py::run_sft`): loads the
    base model (4-bit quantized if `strategy="qlora"`), wraps it in a
    `peft.LoraConfig`, trains via TRL's `SFTTrainer` with early stopping on the
    held-out split — epoch count is never fixed upfront, `loop.max_epochs` is
-   only a ceiling — then downloads the trained adapter locally.
+   only a ceiling. Either **dispatched to Modal** (`training/modal_app.py::train_lora`,
+   which then downloads the adapter locally), or, with **`--local`**, run
+   directly on this machine (`training/local_trainer.py::train_locally`) —
+   auto-detects `cuda`/`mps`/`cpu` and writes straight to a local temp dir, no
+   download step. QLoRA locally requires CUDA (`bitsandbytes`); otherwise only
+   `lora` is allowed, checked upfront with a clear error.
 
 ### Stage (`stages/base.py`)
 
@@ -106,7 +118,7 @@ Shared base: `verbose`/`_log`, a `name` each subclass sets from
 (`_validate_input`) then runs (`_run`), and a `save_output(output, run_id)`
 hook (base no-ops; `DataGenerator`/`DataFormatter` save a `Distiset` via
 `save_distiset`, `FineTuner` copies the downloaded adapter into
-`models/<run_id>/`). Per-stage input checks: DataGenerator (non-empty
+`modelsets/<run_id>/`). Per-stage input checks: DataGenerator (non-empty
 prompt), DataFormatter (`messages` column), FineTuner (`text` column).
 
 ## Configuration
@@ -127,13 +139,17 @@ stage's own config object, never a loose flat argument:
   `target_modules`, `dropout`) and `loop: TrainingLoopConfig` (`batch_size`,
   `grad_accumulation`, `learning_rate`, `max_epochs`, `eval_steps`,
   `early_stopping_patience`, `validation_split`), plus `modal_timeout_seconds`.
-  CLI: `--gpu-tier` is the opt-in trigger that skips the cost heuristic
-  entirely; `--strategy`, `--lora-rank`, `--target-modules`, `--lora-dropout`,
+  CLI: `--gpu-tier` (dispatch to Modal, skipping the cost heuristic) and
+  `--local` (train on this machine instead — needs `uv sync --extra
+  local-training`) are the two opt-in triggers, mutually exclusive.
+  `--strategy`, `--lora-rank`, `--target-modules`, `--lora-dropout`,
   `--batch-size`, `--grad-accumulation`, `--learning-rate`, `--max-epochs`,
-  `--eval-steps`, `--early-stopping-patience`, `--validation-split`,
-  `--modal-timeout` only take effect alongside `--gpu-tier` (each falls back
-  to its default if not given; `helper.py::validate_training_flags` errors if
-  any is passed without `--gpu-tier`).
+  `--eval-steps`, `--early-stopping-patience`, `--validation-split` take
+  effect alongside either one (each falls back to its default if not given);
+  `--modal-timeout` only makes sense with `--gpu-tier`.
+  `helper.py::validate_training_flags` errors if an override flag is passed
+  without one of `--gpu-tier`/`--local`, or if both dispatch targets are
+  given together.
 
 Programmatic callers pass the same config objects directly:
 `DistillationPipeline(generation=DataGenerationConfig(...), training=TrainingConfig(...))`.
@@ -152,7 +168,7 @@ stages/
   base.py            -- Stage: validate-then-run template, save_output hook
   data_generator.py  -- DataGenerator: guide -> prompts -> answers -> refine
   data_formatter.py  -- DataFormatter: chat-template rendering
-  fine_tuner.py      -- FineTuner: resolve config -> split -> dispatch to Modal
+  fine_tuner.py      -- FineTuner: resolve config -> split -> train (Modal or local)
 model/
   constants.py       -- OpenRouter URLs, max tokens, score threshold, guide prompt
   base.py            -- Model: OpenRouter-backed role
@@ -169,7 +185,9 @@ training/
   constants.py       -- Modal GPU tier catalog, LoRA/training defaults
   config.py          -- TrainingConfig, AdapterConfig, TrainingLoopConfig
   heuristic.py       -- recommend_configs: cost/feasibility ranking (+ standalone CLI)
+  trainer.py         -- run_sft: shared LoRA/QLoRA SFT core (Modal + local)
   modal_app.py       -- Modal App/Image/Volume + train_lora remote function
+  local_trainer.py   -- detect_device, train_locally (--local, needs local-training extra)
 main.py              -- CLI entry point
 ```
 
@@ -278,6 +296,12 @@ Modal.
 - **CLI training flags use `arg if arg is not None else DEFAULT`**, not
   `arg or DEFAULT` — several (e.g. `--lora-dropout 0`) have a meaningful `0`/
   `0.0` value that `or` would silently discard.
+- **`--local` needs `uv sync --extra local-training`** (torch, peft, trl,
+  accelerate) — kept out of the main dependency list so Modal-only users keep
+  a lean install. `bitsandbytes` isn't included; QLoRA locally only works if
+  CUDA is detected (`training/local_trainer.py::detect_device`), otherwise
+  `--strategy qlora --local` errors upfront rather than failing deep inside
+  `bitsandbytes`.
 
 ## Defaults
 
@@ -300,8 +324,25 @@ code path — OpenRouter's listing isn't reliable on its own.
 - `.env` holds `OPENROUTER_API_KEY` (gitignored; `.env.example` is the template).
 - Python 3.12 via `uv` (`uv run main.py ...`).
 - `modal` is a local dependency (client SDK only) — run `modal token new` once
-  to authenticate. Training itself runs on Modal's infra: `torch`, `peft`,
-  `trl`, `bitsandbytes`, `accelerate` are declared only in the Modal `Image`
-  (`training/modal_app.py`), never installed locally.
+  to authenticate. By default, training runs on Modal's infra: `torch`,
+  `peft`, `trl`, `bitsandbytes`, `accelerate` are declared in the Modal
+  `Image` (`training/modal_app.py`) and not required locally.
+- For `--local` training, install the same stack locally instead:
+  `uv sync --extra local-training` (torch, peft, trl, accelerate;
+  `bitsandbytes`/QLoRA stays CUDA-only, so local QLoRA needs a CUDA machine).
 - Key local deps: `distilabel[instructor,openai]`, `pydantic`,
   `python-dotenv`, `rich`, `requests`, `datasets`, `transformers`, `modal`.
+
+## Development
+
+Lint before pushing — the same check CI runs (`.github/workflows/lint.yml`):
+
+```bash
+uv run --only-group dev ruff check .        # lint (installs only ruff)
+uv run --only-group dev ruff check . --fix  # apply safe autofixes
+```
+
+`ruff` is pinned (`<0.17`) in `pyproject.toml`'s `dev` dependency group and the
+enabled rule set is declared explicitly under `[tool.ruff.lint]`, so the lint
+result is reproducible rather than tracking ruff's evolving defaults. `--only-group
+dev` installs just `ruff`, not the ML stack, so the check stays fast.

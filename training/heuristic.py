@@ -8,7 +8,6 @@ early stopping decide epoch count and reveal real quality).
 """
 
 import argparse
-from typing import List, Optional, Tuple
 
 from huggingface_hub import model_info
 from rich.console import Console
@@ -40,95 +39,95 @@ console = Console()
 # `python -m training.heuristic` as a quick reference for what each knob
 # does and how it affects cost/quality/feasibility. Ordered to match
 # TrainingConfig's own field order.
-KNOB_DESCRIPTIONS: List[Tuple[str, str]] = [
+KNOB_DESCRIPTIONS: list[tuple[str, str]] = [
     (
         "gpu_tier",
-        "Which Modal GPU tier to train on -- sets available VRAM and $/hour. "
+        ("Which Modal GPU tier to train on -- sets available VRAM and $/hour. "
         "The heuristic picks the cheapest tier that fits; override for more "
-        "headroom or a faster GPU.",
+        "headroom or a faster GPU."),
     ),
     (
         "strategy",
-        "lora (full-precision frozen base) or qlora (4-bit quantized base -- "
+        ("lora (full-precision frozen base) or qlora (4-bit quantized base -- "
         "less memory, slight quality risk). The heuristic prefers lora when "
-        "it fits, falling back to qlora only if needed.",
+        "it fits, falling back to qlora only if needed."),
     ),
     (
         "adapter.rank",
-        "How expressive the LoRA adapter is. Higher = can learn more complex "
+        ("How expressive the LoRA adapter is. Higher = can learn more complex "
         "changes, at the cost of a bit more memory/compute and higher "
-        "overfitting risk on small datasets.",
+        "overfitting risk on small datasets."),
     ),
     (
         "adapter.target_modules",
-        "Which weight matrices get adapted (e.g. attention projections). "
+        ("Which weight matrices get adapted (e.g. attention projections). "
         "Adding more (e.g. MLP layers) increases adaptation capacity and "
-        "adapter size.",
+        "adapter size."),
     ),
     (
         "adapter.dropout",
-        "Regularization on the adapter. Higher reduces overfitting risk "
+        ("Regularization on the adapter. Higher reduces overfitting risk "
         "(useful for small datasets or many epochs), at some cost to how "
-        "fast the adapter learns.",
+        "fast the adapter learns."),
     ),
     (
         "loop.batch_size",
-        "Samples processed per training step. Larger = more stable "
+        ("Samples processed per training step. Larger = more stable "
         "gradients, more memory. The heuristic picks the largest that fits "
-        "your GPU tier.",
+        "your GPU tier."),
     ),
     (
         "loop.grad_accumulation",
-        "Simulates a larger effective batch size without the memory cost, "
+        ("Simulates a larger effective batch size without the memory cost, "
         "by accumulating gradients over several steps before updating "
-        "weights.",
+        "weights."),
     ),
     (
         "loop.learning_rate",
-        "Step size for weight updates. Too high destabilizes training; too "
-        "low slows convergence.",
+        ("Step size for weight updates. Too high destabilizes training; too "
+        "low slows convergence."),
     ),
     (
         "loop.max_epochs",
-        "Upper bound on training passes -- early stopping decides the "
+        ("Upper bound on training passes -- early stopping decides the "
         "ACTUAL count. This is just a cost ceiling: lower it for a cheap "
-        "experiment, raise it for a tiny dataset that needs more passes.",
+        "experiment, raise it for a tiny dataset that needs more passes."),
     ),
     (
         "loop.eval_steps",
-        "How often (in steps) the model is checked against the held-out "
+        ("How often (in steps) the model is checked against the held-out "
         "validation set. Too infrequent risks overshooting the best "
-        "checkpoint; too frequent adds overhead.",
+        "checkpoint; too frequent adds overhead."),
     ),
     (
         "loop.early_stopping_patience",
-        "Non-improving evaluations tolerated before stopping. Lower = stops "
+        ("Non-improving evaluations tolerated before stopping. Lower = stops "
         "sooner (cheaper, riskier); higher = more patient, costs more "
-        "compute.",
+        "compute."),
     ),
     (
         "loop.validation_split",
-        "Fraction of the dataset held out to monitor for early stopping. "
-        "Larger = more reliable signal, less data left to actually train on.",
+        ("Fraction of the dataset held out to monitor for early stopping. "
+        "Larger = more reliable signal, less data left to actually train on."),
     ),
     (
         "modal_timeout_seconds",
-        "Hard kill-time for the Modal job. Raise this for bigger datasets "
-        "or slower/cheaper GPU tiers, or the job gets killed mid-training.",
+        ("Hard kill-time for the Modal job. Raise this for bigger datasets "
+        "or slower/cheaper GPU tiers, or the job gets killed mid-training."),
     ),
 ]
 
 
 def recommend_configs(
-    child_model_id: str, sample_texts: List[str], top_n: int
-) -> List[TrainingConfig]:
+    child_model_id: str, sample_texts: list[str], top_n: int
+) -> list[TrainingConfig]:
     """Returns up to `top_n` candidate TrainingConfigs, cheapest first, among
     (gpu_tier, strategy) combinations that plausibly fit `child_model_id`.
     """
     param_count, hidden_size, num_layers = _model_metadata(child_model_id)
     max_seq_len = _max_sequence_length(child_model_id, sample_texts)
 
-    candidates: List[TrainingConfig] = []
+    candidates: list[TrainingConfig] = []
     for gpu_tier, (vram_gb, usd_per_hour) in MODAL_GPU_TIERS.items():
         for strategy in (LORA, QLORA):
             batch_size = _best_batch_size(
@@ -165,7 +164,7 @@ def recommend_configs(
     return candidates[:top_n]
 
 
-def _model_metadata(child_model_id: str) -> Tuple[int, int, int]:
+def _model_metadata(child_model_id: str) -> tuple[int, int, int]:
     """Returns (param_count, hidden_size, num_layers) without downloading weights."""
     info = model_info(child_model_id)
     if info.safetensors is None:
@@ -177,11 +176,11 @@ def _model_metadata(child_model_id: str) -> Tuple[int, int, int]:
 
     config = AutoConfig.from_pretrained(child_model_id)
     hidden_size = config.hidden_size
-    num_layers = getattr(config, "num_hidden_layers", None) or getattr(config, "num_layers")
+    num_layers = getattr(config, "num_hidden_layers", None) or config.num_layers
     return param_count, hidden_size, num_layers
 
 
-def _max_sequence_length(child_model_id: str, sample_texts: List[str]) -> int:
+def _max_sequence_length(child_model_id: str, sample_texts: list[str]) -> int:
     """Longest tokenized sample, or DEFAULT_FALLBACK_SEQ_LEN if none given."""
     if not sample_texts:
         return DEFAULT_FALLBACK_SEQ_LEN
@@ -196,7 +195,7 @@ def _best_batch_size(
     hidden_size: int,
     num_layers: int,
     max_seq_len: int,
-) -> Optional[int]:
+) -> int | None:
     """Largest candidate batch size that fits `vram_gb`, or None if even
     batch_size=1 doesn't fit."""
     for batch_size in BATCH_SIZE_CANDIDATES:
@@ -241,7 +240,7 @@ def _print_knob_glossary() -> None:
     console.print(table)
 
 
-def _print_shortlist(shortlist: List[TrainingConfig]) -> None:
+def _print_shortlist(shortlist: list[TrainingConfig]) -> None:
     """Prints the ranked shortlist as a table."""
     table = Table(title="Ranked training configs (cheapest first)")
     table.add_column("#", justify="right")
