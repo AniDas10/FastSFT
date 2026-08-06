@@ -263,75 +263,55 @@ def main():
         else None
     )
 
-    # --local alone (no other override) stays training=None too -- lets
-    # FineTuner's own local-defaults branch run, which auto-detects and logs
-    # the actual device (e.g. "local (mps)") rather than a generic "local".
-    _local_overrides_given = any(
-        v is not None
-        for v in (
-            args.strategy, args.lora_rank, args.target_modules, args.lora_dropout,
-            args.batch_size, args.grad_accumulation, args.learning_rate,
-            args.max_epochs, args.eval_steps, args.early_stopping_patience,
-            args.validation_split,
-        )
-    )
+    # Collect only the flags the caller actually set (`is not None`, not truthy:
+    # 0/0.0 are meaningful here, e.g. --lora-dropout 0). Splatting these lets
+    # each dataclass supply its own defaults, so the defaults live in exactly
+    # one place (training/config.py) and are never restated here.
+    adapter_overrides = {
+        k: v
+        for k, v in {
+            "rank": args.lora_rank,
+            "target_modules": args.target_modules,
+            "dropout": args.lora_dropout,
+        }.items()
+        if v is not None
+    }
+    loop_overrides = {
+        k: v
+        for k, v in {
+            "batch_size": args.batch_size,
+            "grad_accumulation": args.grad_accumulation,
+            "learning_rate": args.learning_rate,
+            "max_epochs": args.max_epochs,
+            "eval_steps": args.eval_steps,
+            "early_stopping_patience": args.early_stopping_patience,
+            "validation_split": args.validation_split,
+        }.items()
+        if v is not None
+    }
+    top_overrides = {
+        k: v
+        for k, v in {
+            "strategy": args.strategy,
+            "modal_timeout_seconds": args.modal_timeout,
+        }.items()
+        if v is not None
+    }
 
-    # None (the default) lets FineTuner decide -- the cost heuristic on
-    # Modal, or local defaults with --local; --gpu-tier, or --local plus any
-    # override flag, builds a fully explicit config instead. `is not None`
-    # (not `or`) throughout: 0/0.0 are meaningful values for several of
-    # these (e.g. --lora-dropout 0), not "unset".
+    # Left as None (letting FineTuner decide: the Modal cost heuristic, or local
+    # defaults with --local) unless --gpu-tier, or --local plus at least one
+    # override, asks for an explicit config. gpu_tier is the one required field
+    # with no default -- Modal needs the chosen tier; --local's sole "tier" is
+    # this machine.
+    overrides_given = bool(adapter_overrides or loop_overrides or top_overrides)
     training = (
         TrainingConfig(
             gpu_tier=args.gpu_tier if args.gpu_tier is not None else "local",
-            strategy=args.strategy if args.strategy is not None else DEFAULT_STRATEGY,
-            adapter=AdapterConfig(
-                rank=args.lora_rank if args.lora_rank is not None else DEFAULT_LORA_RANK,
-                target_modules=(
-                    args.target_modules
-                    if args.target_modules is not None
-                    else list(LORA_TARGET_MODULES)
-                ),
-                dropout=(
-                    args.lora_dropout
-                    if args.lora_dropout is not None
-                    else DEFAULT_LORA_DROPOUT
-                ),
-            ),
-            loop=TrainingLoopConfig(
-                batch_size=(
-                    args.batch_size if args.batch_size is not None else DEFAULT_BATCH_SIZE
-                ),
-                grad_accumulation=(
-                    args.grad_accumulation
-                    if args.grad_accumulation is not None
-                    else DEFAULT_GRAD_ACCUMULATION
-                ),
-                learning_rate=(
-                    args.learning_rate
-                    if args.learning_rate is not None
-                    else DEFAULT_LEARNING_RATE
-                ),
-                max_epochs=args.max_epochs if args.max_epochs is not None else MAX_EPOCHS,
-                eval_steps=args.eval_steps if args.eval_steps is not None else EVAL_STEPS,
-                early_stopping_patience=(
-                    args.early_stopping_patience
-                    if args.early_stopping_patience is not None
-                    else EARLY_STOPPING_PATIENCE
-                ),
-                validation_split=(
-                    args.validation_split
-                    if args.validation_split is not None
-                    else DEFAULT_VALIDATION_SPLIT
-                ),
-            ),
-            modal_timeout_seconds=(
-                args.modal_timeout
-                if args.modal_timeout is not None
-                else DEFAULT_MODAL_TIMEOUT_SECONDS
-            ),
+            adapter=AdapterConfig(**adapter_overrides),
+            loop=TrainingLoopConfig(**loop_overrides),
+            **top_overrides,
         )
-        if (args.gpu_tier is not None or (args.local and _local_overrides_given))
+        if (args.gpu_tier is not None or (args.local and overrides_given))
         else None
     )
 

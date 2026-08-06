@@ -42,9 +42,18 @@ ADAPTER_BASE_OVERHEAD_GB = 0.05
 ADAPTER_PER_RANK_GB = 0.002
 DEFAULT_FALLBACK_SEQ_LEN = 512
 
-# Training-loop defaults (upper bound on epochs -- early stopping decides
-# the actual count, per the epoch-count discussion: this is never fixed a
-# priori, only capped).
+# MAX_EPOCHS is an upper bound; early stopping decides the actual count.
 MAX_EPOCHS = 10
 EVAL_STEPS = 20
 EARLY_STOPPING_PATIENCE = 3
+
+# Mask the prompt (system+user) tokens from the loss so training/eval loss
+# reflects the answer only. On by default; the trainer resolves HOW to mask in
+# a model-agnostic way (see training/trainer.py::_resolve_loss_masking). Set
+# False to fall back to loss over the whole formatted sequence.
+DEFAULT_MASK_PROMPT_LOSS = True
+
+# Passing this single value as target_modules makes PEFT auto-target every
+# linear layer, regardless of a model's attention-projection naming -- the
+# model-agnostic escape hatch for architectures the default names don't fit.
+ALL_LINEAR_TARGET = "all-linear"

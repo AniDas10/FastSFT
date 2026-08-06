@@ -1,11 +1,11 @@
 """DataFormatter mini-pipeline: renders a dataset into a target model's chat format."""
 
-from datasets import DatasetDict
 from distilabel.distiset import Distiset
 from transformers import AutoTokenizer
 
 from constants import FORMATTED_OUTPUT_SUBDIR
-from stages.base import Stage, save_distiset
+from helper import convert_to_distiset, save_distiset
+from stages.base import Stage
 from stages.constants import DATA_FORMATTER
 
 
@@ -73,4 +73,4 @@ class DataFormatter(Stage):
 
         train = train.map(render)
         self._log(f"Done: formatted {len(train)} samples.")
-        return Distiset({"default": DatasetDict({"train": train})})
+        return convert_to_distiset(train)

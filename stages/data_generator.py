@@ -1,6 +1,5 @@
 """DataGenerator mini-pipeline: guide -> generate instructions -> answer -> refine."""
 
-from datasets import DatasetDict
 from distilabel.distiset import Distiset
 
 from constants import (
@@ -18,11 +17,12 @@ from data.constants import (
 from data.prompt_generator import PromptGenerator, seed_count
 from data.refiner import DataRefiner
 from data.response_generator import ResponseGenerator
+from helper import convert_to_distiset, save_distiset
 from model.base import Model
 from model.constants import DEFAULT_MAX_TOKENS, DEFAULT_SCORE_THRESHOLD
 from model.guide import Guide, GuideInstructions
 from model.judge import Judge
-from stages.base import Stage, save_distiset
+from stages.base import Stage
 from stages.constants import DATA_GENERATOR
 
 
@@ -141,4 +141,4 @@ class DataGenerator(Stage):
             }
 
         train = train.map(convert, remove_columns=["instruction", "generation"])
-        return Distiset({"default": DatasetDict({"train": train})})
+        return convert_to_distiset(train)

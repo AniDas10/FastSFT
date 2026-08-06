@@ -1,11 +1,12 @@
 """Refines a Distiset by regenerating samples that fail the judge's quality bar."""
 
 
-from datasets import Dataset, DatasetDict, concatenate_datasets
+from datasets import Dataset, concatenate_datasets
 from distilabel.distiset import Distiset
 
 from data.constants import MAX_REFINE_ITERATIONS
 from data.response_generator import ResponseGenerator
+from helper import convert_to_distiset
 from model.base import Model
 from model.constants import DEFAULT_SCORE_THRESHOLD
 from model.judge import Judge
@@ -17,8 +18,8 @@ class DataRefiner:
     """
 
     def __init__(self, parent_model: Model, judge_model: Judge):
-        self.parent_model = parent_model
-        self.judge_model = judge_model
+        self._parent_model = parent_model
+        self._judge_model = judge_model
 
     def refine(
         self, distiset: Distiset, threshold: float = DEFAULT_SCORE_THRESHOLD
@@ -28,7 +29,7 @@ class DataRefiner:
         # Score the initial batch once; thereafter score only fresh rows.
         scores = self._score(train)
         for _ in range(MAX_REFINE_ITERATIONS):
-            if self.judge_model.failed_sample_count(scores, threshold=threshold) == 0:
+            if self._judge_model.failed_sample_count(scores, threshold=threshold) == 0:
                 break
 
             failed_instructions = self._failed_instructions(train, scores, threshold)
@@ -37,12 +38,12 @@ class DataRefiner:
             train = concatenate_datasets([train, replacements])
             scores = scores + self._score(replacements)
 
-        return Distiset({"default": DatasetDict({"train": train})})
+        return convert_to_distiset(train)
 
     def _score(self, train: Dataset) -> list[float]:
         """Scores every row in `train`, returned aligned to row order."""
         samples = {str(i): row["generation"] for i, row in enumerate(train)}
-        scores_by_id = self.judge_model.score_samples(samples)
+        scores_by_id = self._judge_model.score_samples(samples)
         return [scores_by_id[str(i)] for i in range(len(train))]
 
     def _failed_instructions(
@@ -65,7 +66,7 @@ class DataRefiner:
 
     def _regenerate(self, instructions: list[str]) -> Dataset:
         """Generates fresh answers for `instructions`."""
-        replacements = ResponseGenerator(model=self.parent_model).generate(
+        replacements = ResponseGenerator(model=self._parent_model).generate(
             instructions
         )
         return replacements["default"]["train"]

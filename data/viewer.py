@@ -9,7 +9,7 @@ from rich.console import Console
 from rich.panel import Panel
 
 from constants import DEFAULT_OUTPUT_DIR, FORMATTED_OUTPUT_SUBDIR, RAW_OUTPUT_SUBDIR
-from helper import load_data
+from helper import latest_run_path, load_data
 
 console = Console()
 
@@ -22,29 +22,13 @@ def _format_message(message: dict) -> str:
     return f"[bold {color}]{role}[/bold {color}]: {message.get('content', '')}"
 
 
-def _latest_run_path(base_dir: str) -> str:
-    """Returns the most recent timestamped run folder under `base_dir`."""
-    if not os.path.isdir(base_dir):
-        raise FileNotFoundError(
-            f"No '{base_dir}' directory found. Run main.py first, or pass path=..."
-        )
-
-    runs = sorted(
-        d for d in os.listdir(base_dir) if os.path.isdir(os.path.join(base_dir, d))
-    )
-    if not runs:
-        raise FileNotFoundError(f"No runs found under '{base_dir}'.")
-
-    return os.path.join(base_dir, runs[-1])
-
-
 class DataViewer:
     """Loads a saved `Distiset` and previews samples."""
 
     def __init__(self, path: str | None = None, kind: str = "raw"):
         if path is None:
             subdir = FORMATTED_OUTPUT_SUBDIR if kind == "formatted" else RAW_OUTPUT_SUBDIR
-            path = _latest_run_path(os.path.join(DEFAULT_OUTPUT_DIR, subdir))
+            path = latest_run_path(os.path.join(DEFAULT_OUTPUT_DIR, subdir))
         distiset = load_data(path)
         self.dataset = distiset["default"]["train"]
 
