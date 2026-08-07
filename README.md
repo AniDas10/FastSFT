@@ -33,6 +33,11 @@ uv run main.py "a pirate-themed customer support chatbot" --num-samples 50 --chi
 uv run python -m data.viewer               # raw `messages`
 uv run python -m data.viewer --formatted   # rendered `text`
 
+# inspect a finished training run's loss curve + telemetry (latest under modelsets/)
+uv run python -m training.stats_viewer
+uv run python -m training.stats_viewer modelsets/<timestamp>
+uv run python -m training.stats_viewer --json    # machine-readable
+
 # preview training-config options for a model before running anything
 uv run python -m training.heuristic Qwen/Qwen2.5-0.5B-Instruct
 uv run python -m training.heuristic Qwen/Qwen2.5-0.5B-Instruct --input-path datasets/formatted/<timestamp>
@@ -138,7 +143,14 @@ stage's own config object, never a loose flat argument:
   (`lora`/`qlora`), a nested `adapter: AdapterConfig` (`rank`,
   `target_modules`, `dropout`) and `loop: TrainingLoopConfig` (`batch_size`,
   `grad_accumulation`, `learning_rate`, `max_epochs`, `eval_steps`,
-  `early_stopping_patience`, `validation_split`), plus `modal_timeout_seconds`.
+  `early_stopping_patience`, `validation_split`, `mask_prompt_loss`), plus
+  `modal_timeout_seconds`. `mask_prompt_loss` (default on) excludes the
+  prompt (system+user) tokens from the loss so training/eval loss reflects the
+  answer only; `run_sft` picks a model-agnostic way to do this at runtime
+  (`completion_only_loss`, else the template's `assistant_only_loss`, else a
+  logged fall back to whole-sequence loss). `target_modules` accepts
+  `["all-linear"]` to auto-target every linear layer on architectures the
+  default attention-projection names don't fit.
   CLI: `--gpu-tier` (dispatch to Modal, skipping the cost heuristic) and
   `--local` (train on this machine instead — needs `uv sync --extra
   local-training`) are the two opt-in triggers, mutually exclusive.
@@ -188,6 +200,8 @@ training/
   trainer.py         -- run_sft: shared LoRA/QLoRA SFT core (Modal + local)
   modal_app.py       -- Modal App/Image/Volume + train_lora remote function
   local_trainer.py   -- detect_device, train_locally (--local, needs local-training extra)
+  stats.py           -- core: load/structure/diagnose a run's telemetry (pure-stdlib library)
+  stats_viewer.py    -- rich terminal rendering + `python -m` CLI over stats.py (loss curve, --json)
 main.py              -- CLI entry point
 ```
 

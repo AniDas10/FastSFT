@@ -8,6 +8,7 @@ from training.constants import (
     DEFAULT_LEARNING_RATE,
     DEFAULT_LORA_DROPOUT,
     DEFAULT_LORA_RANK,
+    DEFAULT_MASK_PROMPT_LOSS,
     DEFAULT_MODAL_TIMEOUT_SECONDS,
     DEFAULT_STRATEGY,
     DEFAULT_VALIDATION_SPLIT,
@@ -41,6 +42,10 @@ class TrainingLoopConfig:
     eval_steps: int = EVAL_STEPS
     early_stopping_patience: int = EARLY_STOPPING_PATIENCE
     validation_split: float = DEFAULT_VALIDATION_SPLIT
+    # Mask prompt tokens from the loss (answer-only loss). The trainer picks a
+    # model-agnostic masking strategy at runtime; False = loss over the whole
+    # sequence.
+    mask_prompt_loss: bool = DEFAULT_MASK_PROMPT_LOSS
 
 
 @dataclass

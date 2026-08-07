@@ -1,18 +1,6 @@
 """Shared base for DistillationPipeline's mini-pipeline stages."""
 
-import os
 from typing import Any
-
-from distilabel.distiset import Distiset
-
-from constants import DEFAULT_OUTPUT_DIR
-
-
-def save_distiset(dataset: Distiset, subdir: str, run_id: str) -> str:
-    """Saves `dataset` under DEFAULT_OUTPUT_DIR/subdir/run_id; returns the path."""
-    path = os.path.join(DEFAULT_OUTPUT_DIR, subdir, run_id)
-    dataset.save_to_disk(path)
-    return path
 
 
 class Stage:
@@ -23,7 +11,6 @@ class Stage:
     """
 
     # Canonical stage name, set by each subclass from stages/constants.py.
-    # __init__ rejects a subclass that leaves it unset.
     name: str = ""
 
     def __init__(self, verbose: bool = True):
