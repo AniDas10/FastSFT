@@ -12,18 +12,8 @@ than left to fail deep inside bitsandbytes.
 import tempfile
 from typing import Any
 
+from device import detect_device, dtype_for_device
 from training.constants import QLORA
-
-
-def detect_device() -> str:
-    """Returns 'cuda', 'mps', or 'cpu' -- whichever this machine actually has."""
-    import torch
-
-    if torch.cuda.is_available():
-        return "cuda"
-    if torch.backends.mps.is_available():
-        return "mps"
-    return "cpu"
 
 
 def assert_strategy_supported(strategy: str, device: str) -> None:
@@ -45,15 +35,12 @@ def train_locally(
 ) -> str:
     """Runs LoRA/QLoRA SFT on this machine; returns the local directory the
     trained adapter was saved to."""
-    import torch
-
     from training.trainer import run_sft
 
     device = detect_device()
     assert_strategy_supported(config["strategy"], device)
 
-    # bf16 needs a supported accelerator; fall back to fp32 on CPU.
-    torch_dtype = torch.bfloat16 if device in ("cuda", "mps") else torch.float32
+    torch_dtype = dtype_for_device(device)
     device_map = {"": device}  # single-device placement, no multi-GPU sharding
 
     output_dir = tempfile.mkdtemp(prefix="finetuner_local_")
