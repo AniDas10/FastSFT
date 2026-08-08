@@ -115,7 +115,7 @@ class FineTuner(Stage):
             return self._training_config
 
         if self._local_training:
-            from training.local_trainer import detect_device
+            from device import detect_device
 
             device = detect_device()
             self._log(f"[1/3] Training locally on detected device: {device}.")
