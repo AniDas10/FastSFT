@@ -15,7 +15,8 @@ import glob
 import json
 import math
 import os
-from dataclasses import dataclass
+
+from findings import Finding
 
 # --- Diagnostic thresholds (deliberately lenient -- these classify a trend,
 # they aren't precise measurements). ---
@@ -58,18 +59,6 @@ def _checkpoint_number(path: str) -> int:
 def series(log_history: list, key: str) -> list[tuple[int, float]]:
     """Extracts (step, value) points for `key` from the trainer's log history."""
     return [(e["step"], e[key]) for e in log_history if key in e and "step" in e]
-
-
-@dataclass
-class Finding:
-    """One diagnostic takeaway from a check: its severity and its message.
-
-    `status` is "good" | "warn" | "info"; the message carries no styling markup
-    so it's equally usable by the terminal renderer and the JSON output.
-    """
-
-    status: str
-    message: str
 
 
 class RunInterpreter:

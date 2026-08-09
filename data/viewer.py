@@ -62,7 +62,7 @@ class DataViewer:
 def main():
     parser = argparse.ArgumentParser(description="Preview samples from a saved distilabel dataset.")
     parser.add_argument(
-        "--path",
+        "--input-path",
         default=None,
         help=f"Directory the dataset was saved to (default: latest run under "
         f"{DEFAULT_OUTPUT_DIR}/{RAW_OUTPUT_SUBDIR}/ or {DEFAULT_OUTPUT_DIR}/"
@@ -77,7 +77,7 @@ def main():
     args = parser.parse_args()
 
     kind = "formatted" if args.formatted else "raw"
-    viewer = DataViewer(args.path, kind=kind)
+    viewer = DataViewer(args.input_path, kind=kind)
     if args.formatted:
         viewer.formatted_samples(args.num_samples)
     else:

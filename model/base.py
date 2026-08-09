@@ -2,10 +2,8 @@
 
 import warnings_filter  # noqa: F401
 
-import logging
 import os
 from functools import lru_cache
-from logging.handlers import QueueHandler
 
 import requests
 from distilabel.distiset import Distiset
@@ -16,6 +14,7 @@ from distilabel.steps.tasks import TextGeneration
 from dotenv import load_dotenv
 
 from constants import DEFAULT_PARENT_MODEL
+from model._logging import detach_stale_queue_handlers
 from model.constants import (
     DEFAULT_MAX_TOKENS,
     OPENROUTER_BASE_URL,
@@ -31,21 +30,6 @@ def _fetch_openrouter_models() -> dict:
     response = requests.get(OPENROUTER_MODELS_URL, timeout=30)
     response.raise_for_status()
     return {m["id"]: m for m in response.json()["data"]}
-
-
-def _detach_stale_queue_handlers() -> None:
-    """Removes any QueueHandler left on the root logger.
-
-    distilabel's stop_logging() (utils/logging.py) closes its multiprocessing
-    queue after every Pipeline.run() but never detaches the QueueHandler it
-    attached to the root logger. Left in place, the next unrelated log call
-    anywhere in the process (e.g. huggingface_hub's HTTP-warning logger)
-    raises "Queue is closed" inside logging's Handler.emit().
-    """
-    root_logger = logging.getLogger()
-    for handler in root_logger.handlers[:]:
-        if isinstance(handler, QueueHandler):
-            root_logger.removeHandler(handler)
 
 
 class Model:
@@ -126,6 +110,23 @@ class Model:
             )
         return generation
 
+    def assert_generation(
+        self, generation: str | None, sample_id: str | None = None
+    ) -> str:
+        """Raises a clear error if a plain-text generation returned nothing.
+        Sibling to assert_structured_output: OpenAI-compatible APIs can return a
+        null/empty completion (filtered or refused) without raising, which would
+        otherwise splice "None"/"" into a downstream prompt or embedding.
+        """
+        if not generation:
+            context = f" for sample '{sample_id}'" if sample_id is not None else ""
+            raise RuntimeError(
+                f"Model '{self.model_id}' returned no generation{context}. "
+                "This usually means the response was empty, filtered, or "
+                "refused by the provider -- try a different model_id or prompt."
+            )
+        return generation
+
     def build_llm(self, structured_output: dict | None = None) -> OpenAILLM:
         self._ensure_open_weight()
         return OpenAILLM(
@@ -156,5 +157,5 @@ class Model:
             load_data >> task
 
         distiset = pipeline.run(use_cache=False)
-        _detach_stale_queue_handlers()
+        detach_stale_queue_handlers()
         return distiset

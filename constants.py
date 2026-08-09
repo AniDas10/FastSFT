@@ -7,8 +7,15 @@ tuning in data/constants.py.
 DEFAULT_OUTPUT_DIR = "datasets"
 RAW_OUTPUT_SUBDIR = "raw"
 FORMATTED_OUTPUT_SUBDIR = "formatted"
+# Held-out eval prompts (evaluation module). Persisted once and reused across
+# every adapter evaluated, for apples-to-apples comparison over time.
+EVAL_PROMPTS_SUBDIR = "eval_prompts"
 MODELSETS_OUTPUT_DIR = "modelsets"
 RUN_TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
+
+# Sidecar (in a raw dataset run dir) recording the teacher that produced the
+# training data, so evaluation can reconstruct the true parent reference.
+TRAINING_METADATA_FILENAME = "training_metadata.json"
 
 DEFAULT_PARENT_MODEL = "meta-llama/llama-3.3-70b-instruct"
 

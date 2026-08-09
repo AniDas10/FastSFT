@@ -1,15 +1,21 @@
-"""Shared helpers: Distiset load/shape, run-folder timestamps, and CLI-level
-argument validation."""
+"""Shared helpers: Distiset load/shape and run-folder timestamps.
 
-import argparse
+CLI argument validation lives in validation_checks.py.
+"""
+
+import json
 import os
 from datetime import datetime
 
 from datasets import Dataset, DatasetDict
 from distilabel.distiset import Distiset
 
-from constants import DEFAULT_OUTPUT_DIR, RUN_TIMESTAMP_FORMAT
-from stages.constants import STAGE_ORDER
+from constants import (
+    DEFAULT_OUTPUT_DIR,
+    RAW_OUTPUT_SUBDIR,
+    RUN_TIMESTAMP_FORMAT,
+    TRAINING_METADATA_FILENAME,
+)
 
 
 def current_timestamp() -> str:
@@ -54,55 +60,33 @@ def latest_run_path(base_dir: str) -> str:
     return os.path.join(base_dir, runs[-1])
 
 
-def validate_start_stage(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    """--start-stage=STAGE_ORDER[0] (default) requires a prompt and no
-    --input-path; any other --start-stage requires --input-path and no prompt.
-    """
-    first_stage = STAGE_ORDER[0]
-    if args.start_stage == first_stage:
-        if not (args.prompt and args.prompt.strip()):
-            parser.error(f"prompt is required when --start-stage={first_stage} (the default).")
-        if args.input_path:
-            parser.error(f"--input-path is only used when --start-stage is not {first_stage}.")
-    else:
-        if not args.input_path:
-            parser.error(f"--start-stage={args.start_stage} requires --input-path.")
-        if args.prompt:
-            parser.error(
-                f"prompt is ignored when --start-stage={args.start_stage} -- "
-                "pass --input-path instead."
-            )
+def matched_raw_run(adapter_dir: str) -> str | None:
+    """The raw dataset run whose id matches `adapter_dir`'s (FineTuner and
+    DataGenerator share the pipeline run id), or None if it isn't on disk --
+    e.g. a bring-your-own dataset that skipped DataGenerator."""
+    run_id = os.path.basename(os.path.normpath(adapter_dir))
+    path = os.path.join(DEFAULT_OUTPUT_DIR, RAW_OUTPUT_SUBDIR, run_id)
+    return path if os.path.isdir(path) else None
 
 
-def validate_training_flags(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    """--gpu-tier (dispatch to Modal) and --local (train on this machine) are
-    mutually exclusive training destinations. The adapter/loop override flags
-    are only meaningful alongside one of them -- using one without either is
-    likely a mistake, not a silent no-op. --modal-timeout is Modal-specific,
-    so it requires --gpu-tier specifically (not satisfied by --local alone).
-    """
-    if args.gpu_tier is not None and args.local:
-        parser.error("--gpu-tier and --local are mutually exclusive.")
+def save_training_metadata(run_dir: str, **fields) -> str:
+    """Writes `fields` (training provenance, e.g. parent model/instruction) as a
+    JSON sidecar in `run_dir`; returns the path."""
+    path = os.path.join(run_dir, TRAINING_METADATA_FILENAME)
+    with open(path, "w") as f:
+        json.dump(fields, f, indent=2)
+    return path
 
-    if args.modal_timeout is not None and args.gpu_tier is None:
-        parser.error("--modal-timeout requires --gpu-tier to be set.")
 
-    if args.gpu_tier is not None or args.local:
-        return
-    other_flags = {
-        "--strategy": args.strategy,
-        "--lora-rank": args.lora_rank,
-        "--target-modules": args.target_modules,
-        "--lora-dropout": args.lora_dropout,
-        "--batch-size": args.batch_size,
-        "--grad-accumulation": args.grad_accumulation,
-        "--learning-rate": args.learning_rate,
-        "--max-epochs": args.max_epochs,
-        "--eval-steps": args.eval_steps,
-        "--early-stopping-patience": args.early_stopping_patience,
-        "--validation-split": args.validation_split,
-        "--modal-timeout": args.modal_timeout,
-    }
-    given = [name for name, value in other_flags.items() if value is not None]
-    if given:
-        parser.error(f"{', '.join(given)} require --gpu-tier or --local to be set.")
+def load_training_metadata(adapter_dir: str) -> dict | None:
+    """Loads the training provenance persisted for `adapter_dir`, matched by run
+    id (exact only -- a wrong teacher is worse than none). None when there's no
+    matching raw run or no sidecar (an older, or bring-your-own, run)."""
+    raw = matched_raw_run(adapter_dir)
+    if raw is None:
+        return None
+    path = os.path.join(raw, TRAINING_METADATA_FILENAME)
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        return json.load(f)
