@@ -53,7 +53,7 @@ class ChildInferenceEngine:
 
         base = AutoModelForCausalLM.from_pretrained(
             base_id,
-            torch_dtype=dtype_for_device(self._device),
+            dtype=dtype_for_device(self._device),
             device_map={"": self._device},
         )
         self._model = PeftModel.from_pretrained(base, self._adapter_dir)
