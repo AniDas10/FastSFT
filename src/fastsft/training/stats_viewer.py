@@ -16,9 +16,8 @@ from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
 
-from fastsft.constants import MODELSETS_OUTPUT_DIR
 from fastsft.findings_view import findings_panel
-from fastsft.helper import latest_run_path
+from fastsft.helper import latest_run_path, modelsets_dir
 from fastsft.training.stats import (
     RunInterpreter,
     load_stats,
@@ -170,7 +169,7 @@ def main():
         help="Emit the parsed stats as machine-readable JSON instead of the rich view.",
     )
     args = parser.parse_args()
-    adapter_dir = args.adapter_dir or latest_run_path(MODELSETS_OUTPUT_DIR)
+    adapter_dir = args.adapter_dir or latest_run_path(modelsets_dir())
     stats = load_stats(adapter_dir)
     if args.json:
         print(stats_as_json(stats, adapter_dir))

@@ -12,10 +12,30 @@ from distilabel.distiset import Distiset
 
 from fastsft.constants import (
     DEFAULT_OUTPUT_DIR,
+    MODELSETS_OUTPUT_DIR,
+    OUTPUT_DIR_ENV_VAR,
     RAW_OUTPUT_SUBDIR,
     RUN_TIMESTAMP_FORMAT,
     TRAINING_METADATA_FILENAME,
 )
+
+
+def _output_root() -> str:
+    """Base directory under which `datasets/` and `modelsets/` are written.
+    Empty (the default) means the current working directory, so running from the
+    repo behaves as before; set OUTPUT_DIR_ENV_VAR (or pass --output-dir, which
+    sets it) to redirect outputs when fastsft is installed and run elsewhere."""
+    return os.environ.get(OUTPUT_DIR_ENV_VAR, "")
+
+
+def datasets_dir() -> str:
+    """Directory holding raw / formatted / eval-prompt run folders."""
+    return os.path.join(_output_root(), DEFAULT_OUTPUT_DIR)
+
+
+def modelsets_dir() -> str:
+    """Directory holding trained adapter run folders."""
+    return os.path.join(_output_root(), MODELSETS_OUTPUT_DIR)
 
 
 def current_timestamp() -> str:
@@ -31,10 +51,10 @@ def load_data(path: str | None) -> Distiset | None:
 
 
 def save_distiset(dataset: Distiset, subdir: str, run_id: str) -> str:
-    """Saves `dataset` under DEFAULT_OUTPUT_DIR/subdir/run_id; returns the path.
+    """Saves `dataset` under datasets_dir()/subdir/run_id; returns the path.
     Counterpart to load_data (via latest_run_path); used by the pipeline stages
     and the evaluation module to persist their run artifacts."""
-    path = os.path.join(DEFAULT_OUTPUT_DIR, subdir, run_id)
+    path = os.path.join(datasets_dir(), subdir, run_id)
     dataset.save_to_disk(path)
     return path
 
@@ -65,7 +85,7 @@ def matched_raw_run(adapter_dir: str) -> str | None:
     DataGenerator share the pipeline run id), or None if it isn't on disk --
     e.g. a bring-your-own dataset that skipped DataGenerator."""
     run_id = os.path.basename(os.path.normpath(adapter_dir))
-    path = os.path.join(DEFAULT_OUTPUT_DIR, RAW_OUTPUT_SUBDIR, run_id)
+    path = os.path.join(datasets_dir(), RAW_OUTPUT_SUBDIR, run_id)
     return path if os.path.isdir(path) else None
 
 

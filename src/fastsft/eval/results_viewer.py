@@ -18,10 +18,9 @@ from rich.panel import Panel
 from rich.table import Table
 from rich.text import Text
 
-from fastsft.constants import MODELSETS_OUTPUT_DIR
 from fastsft.eval.results import interpret, load_results, results_as_json
 from fastsft.findings_view import findings_panel
-from fastsft.helper import latest_run_path
+from fastsft.helper import latest_run_path, modelsets_dir
 
 console = Console()
 
@@ -141,7 +140,7 @@ def main():
         help="Emit the results (plus findings) as machine-readable JSON.",
     )
     args = parser.parse_args()
-    adapter_dir = args.adapter_dir or latest_run_path(MODELSETS_OUTPUT_DIR)
+    adapter_dir = args.adapter_dir or latest_run_path(modelsets_dir())
     results = load_results(adapter_dir)
     if args.json:
         print(results_as_json(results))
