@@ -31,34 +31,34 @@ New here? [`TUTORIAL.md`](TUTORIAL.md) is a gentler, task-first walkthrough
 
 ```bash
 # .env holds OPENROUTER_API_KEY=sk-or-...; `modal token new` once for Modal auth
-uv run main.py "a pirate-themed customer support chatbot" --num-samples 50 --child-model-id "Qwen/Qwen2.5-0.5B-Instruct"
+uv run fastsft "a pirate-themed customer support chatbot" --num-samples 50 --child-model-id "Qwen/Qwen2.5-0.5B-Instruct"
 
 # preview the latest run
-uv run python -m data.viewer               # raw `messages`
-uv run python -m data.viewer --formatted   # rendered `text`
+uv run python -m fastsft.data.viewer               # raw `messages`
+uv run python -m fastsft.data.viewer --formatted   # rendered `text`
 
 # inspect a finished training run's loss curve + telemetry (latest under modelsets/)
-uv run python -m training.stats_viewer
-uv run python -m training.stats_viewer modelsets/<timestamp>
-uv run python -m training.stats_viewer --json    # machine-readable
+uv run python -m fastsft.training.stats_viewer
+uv run python -m fastsft.training.stats_viewer modelsets/<timestamp>
+uv run python -m fastsft.training.stats_viewer --json    # machine-readable
 
 # preview training-config options for a model before running anything
-uv run python -m training.heuristic Qwen/Qwen2.5-0.5B-Instruct
-uv run python -m training.heuristic Qwen/Qwen2.5-0.5B-Instruct --input-path datasets/formatted/<timestamp>
+uv run python -m fastsft.training.heuristic Qwen/Qwen2.5-0.5B-Instruct
+uv run python -m fastsft.training.heuristic Qwen/Qwen2.5-0.5B-Instruct --input-path datasets/formatted/<timestamp>
 
 # start mid-pipeline from a saved dataset
-uv run main.py --start-stage data_formatter --input-path datasets/raw/<timestamp>
+uv run fastsft --start-stage data_formatter --input-path datasets/raw/<timestamp>
 
 # override the training config directly (skips the cost heuristic)
-uv run main.py "..." --gpu-tier A100-80GB --strategy qlora --lora-rank 32 --max-epochs 5
+uv run fastsft "..." --gpu-tier A100-80GB --strategy qlora --lora-rank 32 --max-epochs 5
 
 # train locally instead of on Modal (needs `uv sync --extra local-training` once)
-uv run main.py "..." --local --max-epochs 2
+uv run fastsft "..." --local --max-epochs 2
 
 # evaluate the trained adapter (needs `uv sync --extra evaluation` once)
-uv run python -m eval.run                       # latest adapter under modelsets/
-uv run python -m eval.results_viewer            # render the win rates + takeaways
-uv run python -m eval.inference_viewer "hi"     # spot-check tuned vs untuned on one prompt
+uv run fastsft-eval                              # latest adapter under modelsets/ (or `python -m fastsft.eval.run`)
+uv run python -m fastsft.eval.results_viewer     # render the win rates + takeaways
+uv run python -m fastsft.eval.inference_viewer "hi"   # spot-check tuned vs untuned on one prompt
 ```
 
 `main.py` saves each stage's output the moment it completes —
@@ -137,7 +137,7 @@ prompt), DataFormatter (`messages` column), FineTuner (`text` column).
 
 ## Configuration
 
-Every tunable knob has a sensible default — `uv run main.py "a prompt"` with
+Every tunable knob has a sensible default — `uv run fastsft "a prompt"` with
 no flags works end to end. Overriding anything routes through the relevant
 stage's own config object, never a loose flat argument:
 
@@ -178,6 +178,8 @@ See `training/heuristic.py`'s standalone CLI (below) for exploring
 `TrainingConfig` options before committing to a run.
 
 ## Architecture
+
+All modules below now live under `src/fastsft/` (a src-layout installable package).
 
 ```
 constants.py         -- entry-point constants (output layout, model-id defaults)
@@ -220,7 +222,7 @@ training/
 eval/                -- post-training evaluation (needs the `evaluation` extra)
   constants.py       -- eval defaults, judge rubrics, results filename
   config.py          -- EvalConfig: adapter + parent/judge/embedding models, knobs
-  run.py             -- `python -m eval.run` CLI: resolve prompts/parent -> Evaluator -> save
+  run.py             -- `fastsft-eval` CLI: resolve prompts/parent -> Evaluator -> save
   evaluator.py       -- Evaluator: parent/tuned/untuned answers -> judge win rates + similarity
   prompt_set.py      -- EvalPromptSet: held-out eval prompts (generate/persist/load)
   inference.py       -- ChildInferenceEngine: local tuned/untuned generation (core)
@@ -285,7 +287,7 @@ never touches `DistillationPipeline`'s own signature:
 
 ### DataViewer (`data/viewer.py`)
 
-`python -m data.viewer [--formatted] [--input-path ...] [--num-samples N]`. Defaults
+`python -m fastsft.data.viewer [--formatted] [--input-path ...] [--num-samples N]`. Defaults
 to the latest timestamped run under `datasets/raw/` (or `datasets/formatted/`).
 Run as a module, not a bare script — it imports project-root modules.
 
@@ -294,7 +296,7 @@ Run as a module, not a bare script — it imports project-root modules.
 Also runnable standalone:
 
 ```bash
-uv run python -m training.heuristic <child_model_id> [--input-path datasets/formatted/<ts>] [--top-n N]
+uv run python -m fastsft.training.heuristic <child_model_id> [--input-path datasets/formatted/<ts>] [--top-n N]
 ```
 
 Prints a plain-English explanation of every `TrainingConfig` knob
@@ -312,9 +314,9 @@ untuned base and the parent teacher — needing `uv sync --extra evaluation`
 logic is kept free of `rich` and split from its presentation layer.
 
 ```bash
-uv run python -m eval.run [adapter_dir] [--num-eval-prompts N] [--no-swap]
-uv run python -m eval.results_viewer [adapter_dir] [--json]
-uv run python -m eval.inference_viewer "a prompt" [adapter_dir] [--tuned-only]
+uv run fastsft-eval [adapter_dir] [--num-eval-prompts N] [--no-swap]   # or `python -m fastsft.eval.run`
+uv run python -m fastsft.eval.results_viewer [adapter_dir] [--json]
+uv run python -m fastsft.eval.inference_viewer "a prompt" [adapter_dir] [--tuned-only]
 ```
 
 `eval.run` (`eval/run.py`) resolves the eval prompt set (reuse the latest saved
@@ -337,7 +339,7 @@ Each pair is judged in both A/B orders to cancel the judge's position bias
 (disable with `--no-swap`), and win rates are reported against a sample-size
 noise floor so a thin eval set isn't over-read. `eval/results.py` turns the raw
 numbers into plain-English takeaways (the same core/presentation split as
-`training/stats.py`), and `eval.results_viewer --json` emits them
+`training/stats.py`), and `fastsft.eval.results_viewer --json` emits them
 machine-readably.
 
 ## Known pitfalls
@@ -389,7 +391,7 @@ machine-readably.
 - `DEFAULT_CHILD_MODEL_ID = Qwen/Qwen2.5-0.5B-Instruct` — a Hugging Face repo
   id, not an OpenRouter id; used by DataFormatter/FineTuner via `AutoTokenizer`.
 - Training defaults (GPU tier catalog, LoRA rank/dropout, epochs, etc.) live
-  in `training/constants.py` — run `uv run python -m training.heuristic
+  in `training/constants.py` — run `uv run python -m fastsft.training.heuristic
   <child_model_id>` for a live, explained view of each one.
 
 When changing a model, verify tool-call support empirically through the real
@@ -398,7 +400,7 @@ code path — OpenRouter's listing isn't reliable on its own.
 ## Environment
 
 - `.env` holds `OPENROUTER_API_KEY` (gitignored; `.env.example` is the template).
-- Python 3.12 via `uv` (`uv run main.py ...`).
+- Python 3.12 via `uv` (`uv run fastsft ...`).
 - `modal` is a local dependency (client SDK only) — run `modal token new` once
   to authenticate. By default, training runs on Modal's infra: `torch`,
   `peft`, `trl`, `bitsandbytes`, `accelerate` are declared in the Modal
@@ -412,6 +414,11 @@ code path — OpenRouter's listing isn't reliable on its own.
   `python-dotenv`, `rich`, `requests`, `datasets`, `transformers`, `modal`.
 
 ## Development
+
+The project is a src-layout installable package (`src/fastsft/`): `uv sync`
+installs it editable, exposing the console scripts `fastsft` (train) and
+`fastsft-eval` (evaluate) — equivalently `uv run python -m fastsft.<module>`
+for any entry point.
 
 Lint before pushing — the same check CI runs (`.github/workflows/lint.yml`):
 

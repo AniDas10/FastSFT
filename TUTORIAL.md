@@ -64,7 +64,7 @@ see §7.)
 ## 3. Your first run
 
 ```bash
-uv run main.py "a pirate-themed customer support chatbot" \
+uv run fastsft "a pirate-themed customer support chatbot" \
   --num-samples 20 \
   --child-model-id "Qwen/Qwen2.5-0.5B-Instruct" \
   --local --max-epochs 1
@@ -96,8 +96,8 @@ adapter (`adapter_config.json` + `adapter_model.safetensors`).
 Never trust a dataset you haven't eyeballed. Preview the latest run:
 
 ```bash
-uv run python -m data.viewer               # the raw generated Q&A
-uv run python -m data.viewer --formatted   # the same data, chat-formatted
+uv run python -m fastsft.data.viewer               # the raw generated Q&A
+uv run python -m fastsft.data.viewer --formatted   # the same data, chat-formatted
 ```
 
 You'll see the parent model's questions and pirate-flavored answers in a nice
@@ -143,7 +143,7 @@ validation and stops training automatically when it stops improving.
 | `--max-epochs 3` | Let it train longer for a tiny dataset. |
 | `--lora-rank 32` | Bigger adapter = more capacity to learn (needs `--local` or `--gpu-tier`). |
 
-Run `uv run main.py --help` to see every flag.
+Run `uv run fastsft --help` to see every flag.
 
 > **Gotcha:** the parent model must be **open-weight** (FastSFT checks this).
 > Closed models' terms of service usually forbid training on their outputs, so
@@ -158,7 +158,7 @@ to [Modal](https://modal.com) (pay-per-second cloud GPUs):
 
 ```bash
 modal token new          # authenticate once
-uv run main.py "..." --num-samples 100   # no --local → trains on Modal
+uv run fastsft "..." --num-samples 100   # no --local → trains on Modal
 ```
 
 Without `--gpu-tier`, FastSFT runs a **cost heuristic**: it estimates each GPU
@@ -167,7 +167,7 @@ then picks the *cheapest tier that fits*. Want to preview that before spending
 anything?
 
 ```bash
-uv run python -m training.heuristic Qwen/Qwen2.5-0.5B-Instruct
+uv run python -m fastsft.training.heuristic Qwen/Qwen2.5-0.5B-Instruct
 ```
 
 This prints a plain-English explanation of every training knob plus a
@@ -184,10 +184,10 @@ instead of regenerating data every time:
 
 ```bash
 # reuse an existing dataset, just re-format + re-train
-uv run main.py --start-stage data_formatter --input-path datasets/raw/<timestamp>
+uv run fastsft --start-stage data_formatter --input-path datasets/raw/<timestamp>
 
 # reuse formatted data, just re-train (e.g. try a higher LoRA rank)
-uv run main.py --start-stage fine_tuner --input-path datasets/formatted/<timestamp> \
+uv run fastsft --start-stage fine_tuner --input-path datasets/formatted/<timestamp> \
   --local --lora-rank 32
 ```
 
@@ -204,7 +204,7 @@ A battle-tested order of operations when you're short on time:
 1. **Prove the loop first.** Run §3 with `--num-samples 10 --local
    --max-epochs 1`. Get *a* model out end-to-end before optimizing anything.
 2. **Fix the style, cheaply.** Iterate on your prompt + `--score-threshold`,
-   checking `data.viewer` each time. Don't train while doing this.
+   checking `fastsft.data.viewer` each time. Don't train while doing this.
 3. **Scale the data.** Once the generated answers look right, bump
    `--num-samples` to 100+.
 4. **Train for real.** Re-run from `--start-stage fine_tuner` with a couple
