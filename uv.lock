@@ -583,7 +583,6 @@ wheels = [
 
 [[package]]
 name = "fastsft"
-version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "datasets" },
@@ -638,7 +637,7 @@ requires-dist = [
     { name = "transformers", specifier = ">=5.14.1" },
     { name = "trl", marker = "extra == 'local-training'" },
 ]
-provides-extras = ["local-training", "evaluation"]
+provides-extras = ["evaluation", "local-training"]
 
 [package.metadata.requires-dev]
 dev = [
