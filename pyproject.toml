@@ -1,6 +1,8 @@
 [project]
 name = "fastsft"
-version = "0.1.0"
+# Single-sourced from src/fastsft/__init__.py (__version__) via hatchling; bump
+# it there (or `hatch version patch|minor|major`), never here.
+dynamic = ["version"]
 description = "A CLI tool that distills a large LLM into a small one via synthetic-data generation, quality filtering, and fine-tuning."
 readme = "README.md"
 requires-python = ">=3.12"
@@ -36,6 +38,10 @@ evaluation = ["torch", "peft", "accelerate", "sentence-transformers"]
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
+
+[tool.hatch.version]
+# The one source of truth for the version: __version__ in this file.
+path = "src/fastsft/__init__.py"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/fastsft"]
