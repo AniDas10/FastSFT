@@ -39,31 +39,33 @@ def test_convert_to_distiset_shape():
     assert inner["text"] == ["a", "b"]
 
 
-class TestLatestRunPath:
-    def test_returns_most_recent_run(self, tmp_path):
-        base = tmp_path / "raw"
-        base.mkdir()
-        for run_id in ("20260101_000000", "20260301_120000", "20260201_000000"):
-            (base / run_id).mkdir()
-        # Timestamped names sort lexicographically == chronologically.
-        assert latest_run_path(str(base)) == str(base / "20260301_120000")
+def test_latest_run_path_returns_most_recent_run(tmp_path):
+    base = tmp_path / "raw"
+    base.mkdir()
+    for run_id in ("20260101_000000", "20260301_120000", "20260201_000000"):
+        (base / run_id).mkdir()
+    # Timestamped names sort lexicographically == chronologically.
+    assert latest_run_path(str(base)) == str(base / "20260301_120000")
 
-    def test_ignores_non_directories(self, tmp_path):
-        base = tmp_path / "raw"
-        base.mkdir()
-        (base / "20260101_000000").mkdir()
-        (base / "stray_file.json").write_text("{}")
-        assert latest_run_path(str(base)) == str(base / "20260101_000000")
 
-    def test_missing_base_raises(self, tmp_path):
-        with pytest.raises(FileNotFoundError):
-            latest_run_path(str(tmp_path / "does_not_exist"))
+def test_latest_run_path_ignores_non_directories(tmp_path):
+    base = tmp_path / "raw"
+    base.mkdir()
+    (base / "20260101_000000").mkdir()
+    (base / "stray_file.json").write_text("{}")
+    assert latest_run_path(str(base)) == str(base / "20260101_000000")
 
-    def test_empty_base_raises(self, tmp_path):
-        base = tmp_path / "empty"
-        base.mkdir()
-        with pytest.raises(FileNotFoundError):
-            latest_run_path(str(base))
+
+def test_latest_run_path_missing_base_raises(tmp_path):
+    with pytest.raises(FileNotFoundError):
+        latest_run_path(str(tmp_path / "does_not_exist"))
+
+
+def test_latest_run_path_empty_base_raises(tmp_path):
+    base = tmp_path / "empty"
+    base.mkdir()
+    with pytest.raises(FileNotFoundError):
+        latest_run_path(str(base))
 
 
 def _make_raw_run(tmp_path, run_id):
@@ -73,56 +75,58 @@ def _make_raw_run(tmp_path, run_id):
     return raw_run
 
 
-class TestMatchedRawRun:
-    def test_exact_run_id_match(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        _make_raw_run(tmp_path, "20260101_000000")
-        # adapter_dir shares the run id (modelsets/<run_id>).
-        matched = matched_raw_run("modelsets/20260101_000000")
-        assert matched is not None
-        assert matched.endswith(f"{RAW_OUTPUT_SUBDIR}/20260101_000000")
-
-    def test_trailing_slash_normalized(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        _make_raw_run(tmp_path, "20260101_000000")
-        assert matched_raw_run("modelsets/20260101_000000/") is not None
-
-    def test_no_match_returns_none(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        _make_raw_run(tmp_path, "20260101_000000")
-        assert matched_raw_run("modelsets/29990101_000000") is None
+def test_matched_raw_run_exact_run_id_match(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _make_raw_run(tmp_path, "20260101_000000")
+    # adapter_dir shares the run id (modelsets/<run_id>).
+    matched = matched_raw_run("modelsets/20260101_000000")
+    assert matched is not None
+    assert matched.endswith(f"{RAW_OUTPUT_SUBDIR}/20260101_000000")
 
 
-class TestTrainingMetadataRoundTrip:
-    def test_save_then_load(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        run_id = "20260101_000000"
-        raw_run = _make_raw_run(tmp_path, run_id)
+def test_matched_raw_run_trailing_slash_normalized(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _make_raw_run(tmp_path, "20260101_000000")
+    assert matched_raw_run("modelsets/20260101_000000/") is not None
 
-        returned = save_training_metadata(
-            str(raw_run),
-            parent_model="meta-llama/llama-3.3-70b-instruct",
-            parent_instruction="Answer like a pirate.",
-            parent_max_tokens=1024,
-            parent_temperature=0.9,
-        )
-        assert returned.endswith(TRAINING_METADATA_FILENAME)
 
-        loaded = load_training_metadata(f"modelsets/{run_id}")
-        assert loaded == {
-            "parent_model": "meta-llama/llama-3.3-70b-instruct",
-            "parent_instruction": "Answer like a pirate.",
-            "parent_max_tokens": 1024,
-            "parent_temperature": 0.9,
-        }
+def test_matched_raw_run_no_match_returns_none(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    _make_raw_run(tmp_path, "20260101_000000")
+    assert matched_raw_run("modelsets/29990101_000000") is None
 
-    def test_load_none_when_no_matching_raw_run(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        # No datasets/raw/<id> at all.
-        assert load_training_metadata("modelsets/20260101_000000") is None
 
-    def test_load_none_when_sidecar_absent(self, tmp_path, monkeypatch):
-        monkeypatch.chdir(tmp_path)
-        run_id = "20260101_000000"
-        _make_raw_run(tmp_path, run_id)  # raw run exists, but no sidecar written
-        assert load_training_metadata(f"modelsets/{run_id}") is None
+def test_training_metadata_save_then_load(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    run_id = "20260101_000000"
+    raw_run = _make_raw_run(tmp_path, run_id)
+
+    returned = save_training_metadata(
+        str(raw_run),
+        parent_model="meta-llama/llama-3.3-70b-instruct",
+        parent_instruction="Answer like a pirate.",
+        parent_max_tokens=1024,
+        parent_temperature=0.9,
+    )
+    assert returned.endswith(TRAINING_METADATA_FILENAME)
+
+    loaded = load_training_metadata(f"modelsets/{run_id}")
+    assert loaded == {
+        "parent_model": "meta-llama/llama-3.3-70b-instruct",
+        "parent_instruction": "Answer like a pirate.",
+        "parent_max_tokens": 1024,
+        "parent_temperature": 0.9,
+    }
+
+
+def test_training_metadata_load_none_when_no_matching_raw_run(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    # No datasets/raw/<id> at all.
+    assert load_training_metadata("modelsets/20260101_000000") is None
+
+
+def test_training_metadata_load_none_when_sidecar_absent(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    run_id = "20260101_000000"
+    _make_raw_run(tmp_path, run_id)  # raw run exists, but no sidecar written
+    assert load_training_metadata(f"modelsets/{run_id}") is None
