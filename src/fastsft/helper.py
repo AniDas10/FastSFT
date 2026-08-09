@@ -21,10 +21,7 @@ from fastsft.constants import (
 
 
 def _output_root() -> str:
-    """Base directory under which `datasets/` and `modelsets/` are written.
-    Empty (the default) means the current working directory, so running from the
-    repo behaves as before; set OUTPUT_DIR_ENV_VAR (or pass --output-dir, which
-    sets it) to redirect outputs when fastsft is installed and run elsewhere."""
+    """Base directory for datasets/ and modelsets/ (empty = CWD)."""
     return os.environ.get(OUTPUT_DIR_ENV_VAR, "")
 
 
@@ -39,9 +36,7 @@ def modelsets_dir() -> str:
 
 
 def current_timestamp() -> str:
-    """Current time formatted as RUN_TIMESTAMP_FORMAT."""
-    # Local (naive) time on purpose: these timestamps name run folders for a
-    # human to read, not to compare across timezones.
+    """Current time formatted as RUN_TIMESTAMP_FORMAT (naive/local on purpose)."""
     return datetime.now().strftime(RUN_TIMESTAMP_FORMAT)  # noqa: DTZ005
 
 
@@ -51,23 +46,19 @@ def load_data(path: str | None) -> Distiset | None:
 
 
 def save_distiset(dataset: Distiset, subdir: str, run_id: str) -> str:
-    """Saves `dataset` under datasets_dir()/subdir/run_id; returns the path.
-    Counterpart to load_data (via latest_run_path); used by the pipeline stages
-    and the evaluation module to persist their run artifacts."""
+    """Saves dataset to datasets_dir()/subdir/run_id; returns the path."""
     path = os.path.join(datasets_dir(), subdir, run_id)
     dataset.save_to_disk(path)
     return path
 
 
 def convert_to_distiset(train: Dataset) -> Distiset:
-    """Wraps a single `train` split into the Distiset({"default": {"train": ...}})
-    shape the stages pass between one another."""
+    """Wrap a single Dataset into the Distiset shape stages expect."""
     return Distiset({"default": DatasetDict({"train": train})})
 
 
 def latest_run_path(base_dir: str) -> str:
-    """Returns the most recent timestamped run folder under `base_dir`
-    (shared by the dataset viewer and the training-stats viewer)."""
+    """Return the most recent timestamped run folder under base_dir."""
     if not os.path.isdir(base_dir):
         raise FileNotFoundError(
             f"No '{base_dir}' directory found. Run the pipeline first, or pass an explicit path."
@@ -81,25 +72,19 @@ def latest_run_path(base_dir: str) -> str:
 
 
 def matched_raw_run(adapter_dir: str) -> str | None:
-    """The raw dataset run whose id matches `adapter_dir`'s (FineTuner and
-    DataGenerator share the pipeline run id), or None if it isn't on disk --
-    e.g. a bring-your-own dataset that skipped DataGenerator."""
+    """The raw run matching adapter_dir's id (both share the same run_id), or None if missing."""
     run_id = os.path.basename(os.path.normpath(adapter_dir))
     path = os.path.join(datasets_dir(), RAW_OUTPUT_SUBDIR, run_id)
     return path if os.path.isdir(path) else None
 
 
 def _training_metadata_path(run_dir: str) -> str:
-    """The provenance sidecar path for a raw run: a SIBLING file next to the run
-    dir, never a file inside it. Distiset.load_from_disk treats every entry in
-    the run dir as a dataset split, so a stray file inside would break every
-    reload of that run (eval's prompt-set lookup, `--start-stage` re-runs)."""
+    """Path for the training metadata sidecar (sibling file, not inside run_dir)."""
     return os.path.normpath(run_dir) + "." + TRAINING_METADATA_FILENAME
 
 
 def save_training_metadata(run_dir: str, **fields) -> str:
-    """Writes `fields` (training provenance, e.g. parent model/instruction) as a
-    JSON sidecar beside `run_dir`; returns the path."""
+    """Write training metadata (parent model/instruction) as JSON sidecar; return path."""
     path = _training_metadata_path(run_dir)
     with open(path, "w") as f:
         json.dump(fields, f, indent=2)
@@ -107,9 +92,7 @@ def save_training_metadata(run_dir: str, **fields) -> str:
 
 
 def load_training_metadata(adapter_dir: str) -> dict | None:
-    """Loads the training provenance persisted for `adapter_dir`, matched by run
-    id (exact only -- a wrong teacher is worse than none). None when there's no
-    matching raw run or no sidecar (an older, or bring-your-own, run)."""
+    """Load training metadata sidecar for an adapter run (by run_id match), or None if missing."""
     raw = matched_raw_run(adapter_dir)
     if raw is None:
         return None

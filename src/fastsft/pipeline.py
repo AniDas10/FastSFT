@@ -65,7 +65,7 @@ class DistillationPipeline:
         local_training: bool,
         verbose: bool,
     ) -> list[Stage]:
-        """Builds only the stages from self._start_index onward."""
+        """Build only the stages from start_index onward."""
         factories = {
             DATA_GENERATOR: lambda: DataGenerator(
                 guide_model=generation.guide_model,
@@ -91,8 +91,7 @@ class DistillationPipeline:
         return [factories[name]() for name in STAGE_ORDER[self._start_index:]]
 
     def run(self, data: Any) -> Iterator[tuple[Stage, Any]]:
-        """Yields (stage, output) as each stage completes. Validates the input
-        eagerly, before any stage runs."""
+        """Validate input, then yield (stage, output) as each stage completes."""
         if data is None:
             raise ValueError(
                 f"run() requires an input for start_stage={self.start_stage!r} "

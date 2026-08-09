@@ -15,11 +15,8 @@ class GuideInstructions(BaseModel):
 
 
 class Guide(Model):
-    """Generates tailored parent/judge system prompts, and a set of diverse
-    seed instructions, from a freeform request -- in one structured-output call.
-    """
+    """Generate parent/judge prompts and seed instructions from a freeform request."""
 
-    # Output shapes instructions, not training data; exempt from open-weight.
     _enforce_open_weight = False
 
     def __init__(
@@ -39,8 +36,7 @@ class Guide(Model):
     def generate_instructions(
         self, user_input: str, num_seeds: int
     ) -> GuideInstructions:
-        """Produces parent_instruction, judge_instruction, and `num_seeds`
-        diverse seed instructions from `user_input`."""
+        """Produce parent/judge prompts and num_seeds topic instructions."""
         distiset = self.run_pipeline(
             [{"instruction": user_input}],
             self.get_instruction().format(num_seeds=num_seeds),

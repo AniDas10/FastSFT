@@ -26,7 +26,7 @@ load_dotenv()
 
 @lru_cache(maxsize=1)
 def _fetch_openrouter_models() -> dict:
-    """Fetches OpenRouter's model catalog, keyed by model id."""
+    """Fetch OpenRouter's model catalog."""
     response = requests.get(OPENROUTER_MODELS_URL, timeout=30)
     response.raise_for_status()
     return {m["id"]: m for m in response.json()["data"]}
@@ -39,8 +39,6 @@ class Model:
     instruction storage. Usable directly (as the parent) or subclassed (see Judge).
     """
 
-    # Only the parent's outputs become training data, so only it enforces the
-    # open-weight constraint; Guide and Judge set this False.
     _enforce_open_weight: bool = True
 
     def __init__(
@@ -62,14 +60,13 @@ class Model:
         self._open_weight_verified = False
 
     def _ensure_open_weight(self) -> None:
-        """Runs the open-weight check once, on first use."""
+        """Run open-weight check once, on first use."""
         if self._enforce_open_weight and not self._open_weight_verified:
             self._assert_open_weight()
             self._open_weight_verified = True
 
     def _assert_open_weight(self) -> None:
-        """Rejects any model without a `hugging_face_id` on OpenRouter (the
-        open-weight signal)."""
+        """Reject models without hugging_face_id on OpenRouter."""
         models = _fetch_openrouter_models()
 
         info = models.get(self.model_id)
@@ -85,7 +82,7 @@ class Model:
             )
 
     def _instruction(self) -> str:
-        """This role's default instruction. Empty unless a subclass overrides it."""
+        """Default instruction for this role (empty; overridden in subclasses)."""
         return ""
 
     def set_instruction(self, instruction: str) -> None:
@@ -113,11 +110,7 @@ class Model:
     def assert_generation(
         self, generation: str | None, sample_id: str | None = None
     ) -> str:
-        """Raises a clear error if a plain-text generation returned nothing.
-        Sibling to assert_structured_output: OpenAI-compatible APIs can return a
-        null/empty completion (filtered or refused) without raising, which would
-        otherwise splice "None"/"" into a downstream prompt or embedding.
-        """
+        """Raise error if generation returned empty (filtered/refused by provider)."""
         if not generation:
             context = f" for sample '{sample_id}'" if sample_id is not None else ""
             raise RuntimeError(
