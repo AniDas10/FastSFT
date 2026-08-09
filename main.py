@@ -14,14 +14,10 @@ from data.constants import (
     DEFAULT_NUM_SAMPLES,
     DEFAULT_PARENT_TEMPERATURE,
 )
-from helper import (
-    current_timestamp,
-    load_data,
-    validate_start_stage,
-    validate_training_flags,
-)
+from helper import current_timestamp, load_data
 from model.constants import DEFAULT_MAX_TOKENS, DEFAULT_SCORE_THRESHOLD
 from pipeline import DistillationPipeline
+from progress import log
 from stages.constants import STAGE_NAMES, STAGE_ORDER
 from training.config import AdapterConfig, TrainingConfig, TrainingLoopConfig
 from training.constants import (
@@ -41,6 +37,7 @@ from training.constants import (
     MODAL_GPU_TIERS,
     QLORA,
 )
+from validation_checks import validate_start_stage, validate_training_flags
 
 
 def _input_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -329,7 +326,7 @@ def main():
     for stage, output in pipeline.run(pipeline_input):
         path = stage.save_output(output, run_id)
         if path:
-            print(f"Saved {stage.name} output to '{path}'")
+            log(f"Saved {stage.name} output to '{path}'")
 
 
 if __name__ == "__main__":

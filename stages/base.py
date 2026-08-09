@@ -2,12 +2,14 @@
 
 from typing import Any
 
+from progress import ProgressLogger
 
-class Stage:
+
+class Stage(ProgressLogger):
     """Base for pipeline stages: shared logging and a validate-then-run template.
 
     Subclasses implement _validate_input and _run; run() is defined once here
-    and not overridden.
+    and not overridden. Progress logging (self._log) comes from ProgressLogger.
     """
 
     # Canonical stage name, set by each subclass from stages/constants.py.
@@ -19,11 +21,7 @@ class Stage:
                 f"{type(self).__name__} must set a non-empty class attribute "
                 "`name` (its canonical stage name from stages/constants.py)."
             )
-        self._verbose = verbose
-
-    def _log(self, message: str) -> None:
-        if self._verbose:
-            print(message)
+        super().__init__(verbose=verbose)
 
     def _validate_input(self, data: Any) -> None:
         raise NotImplementedError(

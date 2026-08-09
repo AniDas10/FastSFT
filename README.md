@@ -20,6 +20,10 @@ sequence, each independently usable and skippable via `start_stage`:
 3. **FineTuner** — formatted dataset in, fine-tuned LoRA/QLoRA adapter out,
    trained remotely on Modal, or locally on your own machine via `--local`.
 
+A separate **evaluation module** (`eval/`, run after training) scores a trained
+adapter against its untuned base and its parent teacher — LLM-judge win rates
+plus embedding similarity. See [Evaluation](#evaluation).
+
 New here? [`TUTORIAL.md`](TUTORIAL.md) is a gentler, task-first walkthrough
 (zero to a trained model in ~15 minutes). This README is the reference.
 
@@ -50,6 +54,11 @@ uv run main.py "..." --gpu-tier A100-80GB --strategy qlora --lora-rank 32 --max-
 
 # train locally instead of on Modal (needs `uv sync --extra local-training` once)
 uv run main.py "..." --local --max-epochs 2
+
+# evaluate the trained adapter (needs `uv sync --extra evaluation` once)
+uv run python -m eval.run                       # latest adapter under modelsets/
+uv run python -m eval.results_viewer            # render the win rates + takeaways
+uv run python -m eval.inference_viewer "hi"     # spot-check tuned vs untuned on one prompt
 ```
 
 `main.py` saves each stage's output the moment it completes —
@@ -173,7 +182,12 @@ See `training/heuristic.py`'s standalone CLI (below) for exploring
 ```
 constants.py         -- entry-point constants (output layout, model-id defaults)
 warnings_filter.py   -- import-time warning suppression (transformers, pydantic)
-helper.py            -- CLI load/save/validate/timestamp helpers
+device.py            -- local torch accelerator/dtype detection (training + eval)
+helper.py            -- Distiset load/save/shape + run-folder timestamp helpers
+validation_checks.py -- CLI argument validation for main.py / eval.run
+findings.py          -- Finding: shared diagnostic record (stdlib; stats + eval)
+findings_view.py     -- shared `rich` rendering for Findings (both viewers)
+progress.py          -- shared rich console + ProgressLogger (stages, Evaluator, CLIs)
 pipeline.py          -- DistillationPipeline: runs STAGE_ORDER from start_stage
 stages/
   constants.py       -- stage names: STAGE_ORDER, STAGE_NAMES
@@ -184,6 +198,7 @@ stages/
 model/
   constants.py       -- OpenRouter URLs, max tokens, score threshold, guide prompt
   base.py            -- Model: OpenRouter-backed role
+  _logging.py        -- distilabel root-logger cleanup for Model.run_pipeline
   guide.py           -- Guide(Model): derives instructions + seed topics
   judge.py           -- Judge(Model): 0-10 scoring
 data/
@@ -199,9 +214,20 @@ training/
   heuristic.py       -- recommend_configs: cost/feasibility ranking (+ standalone CLI)
   trainer.py         -- run_sft: shared LoRA/QLoRA SFT core (Modal + local)
   modal_app.py       -- Modal App/Image/Volume + train_lora remote function
-  local_trainer.py   -- detect_device, train_locally (--local, needs local-training extra)
+  local_trainer.py   -- train_locally (--local, needs local-training extra)
   stats.py           -- core: load/structure/diagnose a run's telemetry (pure-stdlib library)
   stats_viewer.py    -- rich terminal rendering + `python -m` CLI over stats.py (loss curve, --json)
+eval/                -- post-training evaluation (needs the `evaluation` extra)
+  constants.py       -- eval defaults, judge rubrics, results filename
+  config.py          -- EvalConfig: adapter + parent/judge/embedding models, knobs
+  run.py             -- `python -m eval.run` CLI: resolve prompts/parent -> Evaluator -> save
+  evaluator.py       -- Evaluator: parent/tuned/untuned answers -> judge win rates + similarity
+  prompt_set.py      -- EvalPromptSet: held-out eval prompts (generate/persist/load)
+  inference.py       -- ChildInferenceEngine: local tuned/untuned generation (core)
+  inference_viewer.py-- rich `python -m` spot-check over inference.py
+  embeddings.py      -- local sentence embeddings for parent-similarity
+  results.py         -- core: persist/load/interpret results (pure-stdlib library)
+  results_viewer.py  -- rich terminal rendering + `python -m` CLI over results.py (--json)
 main.py              -- CLI entry point
 ```
 
@@ -259,7 +285,7 @@ never touches `DistillationPipeline`'s own signature:
 
 ### DataViewer (`data/viewer.py`)
 
-`python -m data.viewer [--formatted] [--path ...] [--num-samples N]`. Defaults
+`python -m data.viewer [--formatted] [--input-path ...] [--num-samples N]`. Defaults
 to the latest timestamped run under `datasets/raw/` (or `datasets/formatted/`).
 Run as a module, not a bare script — it imports project-root modules.
 
@@ -277,6 +303,42 @@ using a real formatted dataset's sequence lengths (`--input-path`) or a rough
 fallback length if none given. Lets you explore options before running
 `DataGenerator`/`DataFormatter`/`FineTuner` at all, or spending anything on
 Modal.
+
+## Evaluation
+
+After training, `eval/` scores an adapter against two baselines — its own
+untuned base and the parent teacher — needing `uv sync --extra evaluation`
+(torch, peft, accelerate, sentence-transformers). Like the stages, the core
+logic is kept free of `rich` and split from its presentation layer.
+
+```bash
+uv run python -m eval.run [adapter_dir] [--num-eval-prompts N] [--no-swap]
+uv run python -m eval.results_viewer [adapter_dir] [--json]
+uv run python -m eval.inference_viewer "a prompt" [adapter_dir] [--tuned-only]
+```
+
+`eval.run` (`eval/run.py`) resolves the eval prompt set (reuse the latest saved
+one for comparability, or generate + persist a fresh one seeded from the
+training questions and deduped against them to prevent leakage), reconstructs
+the parent teacher from the run's `training_metadata.json` sidecar (identity,
+style prompt, and generation recipe — so the reference answers like the *actual*
+teacher), runs the `Evaluator`, and writes `eval_results.json` next to the
+adapter. For each prompt the `Evaluator` (`eval/evaluator.py`) collects three
+answers — parent (OpenRouter), tuned and untuned child (both local, one base
+load with the adapter toggled via `PeftModel.disable_adapter()`) — and reports:
+
+- **Tuned vs untuned** — the primary signal: did fine-tuning improve quality?
+- **Parent-style match** — the distillation objective: is the tuned child more
+  like the parent's style than untuned? (reference-judged against the parent).
+- **Tuned vs parent** — the remaining gap to the teacher.
+- **Embedding similarity to parent** — distillation fidelity in embedding space.
+
+Each pair is judged in both A/B orders to cancel the judge's position bias
+(disable with `--no-swap`), and win rates are reported against a sample-size
+noise floor so a thin eval set isn't over-read. `eval/results.py` turns the raw
+numbers into plain-English takeaways (the same core/presentation split as
+`training/stats.py`), and `eval.results_viewer --json` emits them
+machine-readably.
 
 ## Known pitfalls
 
@@ -344,6 +406,8 @@ code path — OpenRouter's listing isn't reliable on its own.
 - For `--local` training, install the same stack locally instead:
   `uv sync --extra local-training` (torch, peft, trl, accelerate;
   `bitsandbytes`/QLoRA stays CUDA-only, so local QLoRA needs a CUDA machine).
+- For the evaluation module, `uv sync --extra evaluation` (torch, peft,
+  accelerate, sentence-transformers) — local child inference plus embeddings.
 - Key local deps: `distilabel[instructor,openai]`, `pydantic`,
   `python-dotenv`, `rich`, `requests`, `datasets`, `transformers`, `modal`.
 

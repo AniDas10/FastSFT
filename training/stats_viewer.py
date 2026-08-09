@@ -12,15 +12,14 @@ import warnings_filter  # noqa: F401
 
 import argparse
 
-from rich.console import Console, Group
+from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 from constants import MODELSETS_OUTPUT_DIR
+from findings_view import findings_panel
 from helper import latest_run_path
 from training.stats import (
-    Finding,
     RunInterpreter,
     load_stats,
     series,
@@ -56,10 +55,6 @@ METRIC_DESCRIPTIONS = {
     ),
     "Optimizer steps": "Total weight updates performed across the whole run.",
 }
-
-# status -> (rich style, icon) for a finding; "info" is rendered as a dim note.
-_STATUS_STYLE = {"good": ("green", "✓"), "warn": ("yellow", "!")}
-
 
 def _chart(chart_series: list, width: int = 56, height: int = 12) -> str:
     """Plots (step, loss) points as a terminal line chart. `chart_series` is a
@@ -131,21 +126,9 @@ def _summary_table(stats: dict, train_pts: list, eval_pts: list, acc_pts: list) 
     return table
 
 
-def _format_finding(finding: Finding) -> str:
-    if finding.status == "info":
-        return f"[dim]{finding.message}[/dim]"
-    style, icon = _STATUS_STYLE[finding.status]
-    return f"[{style}]{icon}[/{style}] {finding.message}"
-
-
 def _interpretation(stats: dict) -> Panel:
     """Renders the named diagnostic checks as a plain-English takeaways panel."""
-    findings = RunInterpreter(stats).run()
-    return Panel(
-        Group(*(Text.from_markup(_format_finding(f)) for f in findings)),
-        title="How to read this",
-        border_style="cyan",
-    )
+    return findings_panel(RunInterpreter(stats).run())
 
 
 def render(stats: dict, adapter_dir: str) -> None:

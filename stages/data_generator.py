@@ -17,7 +17,7 @@ from data.constants import (
 from data.prompt_generator import PromptGenerator, seed_count
 from data.refiner import DataRefiner
 from data.response_generator import ResponseGenerator
-from helper import convert_to_distiset, save_distiset
+from helper import convert_to_distiset, save_distiset, save_training_metadata
 from model.base import Model
 from model.constants import DEFAULT_MAX_TOKENS, DEFAULT_SCORE_THRESHOLD
 from model.guide import Guide, GuideInstructions
@@ -58,6 +58,9 @@ class DataGenerator(Stage):
         self._score_threshold = score_threshold
         self._parent_temperature = parent_temperature
         self._parent_max_tokens = parent_max_tokens
+        # The Guide-derived style prompt, captured in _run so save_output can
+        # persist it as this run's teacher provenance (for evaluation to reuse).
+        self._parent_instruction: str | None = None
 
     def _validate_input(self, prompt: str) -> None:
         if not prompt or not prompt.strip():
@@ -65,6 +68,7 @@ class DataGenerator(Stage):
 
     def _run(self, prompt: str) -> Distiset:
         instructions = self._setup(prompt)
+        self._parent_instruction = instructions.parent_instruction
         self._log(
             f"[1/4] Derived instructions and "
             f"{len(instructions.sample_instructions)} seed topics via guide "
@@ -116,7 +120,18 @@ class DataGenerator(Stage):
         return self._to_messages(refined_distiset)
 
     def save_output(self, output: Distiset, run_id: str) -> str:
-        return save_distiset(output, RAW_OUTPUT_SUBDIR, run_id)
+        path = save_distiset(output, RAW_OUTPUT_SUBDIR, run_id)
+        # Record this run's teacher -- identity, style prompt, and generation
+        # recipe -- alongside the dataset, so evaluation reconstructs the true
+        # parent reference (answering like the actual teacher) instead of guessing.
+        save_training_metadata(
+            path,
+            parent_model=self._parent_model,
+            parent_instruction=self._parent_instruction or "",
+            parent_max_tokens=self._parent_max_tokens,
+            parent_temperature=self._parent_temperature,
+        )
+        return path
 
     def _setup(self, prompt: str) -> GuideInstructions:
         """Builds the guide (output budget scaled to the seed count) and

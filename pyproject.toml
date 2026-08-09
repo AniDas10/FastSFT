@@ -23,6 +23,12 @@ dependencies = [
 # CUDA-first and QLoRA locally is only supported when CUDA is detected.
 local-training = ["torch", "peft", "trl", "accelerate"]
 
+# Only needed to run the evaluation module (`python -m eval.run`): local
+# adapter/base inference (torch, peft, accelerate) plus sentence-transformers
+# for the parent-similarity embeddings. Kept optional for the same reason as
+# local-training -- `uv sync --extra evaluation`. No `trl` (no training here).
+evaluation = ["torch", "peft", "accelerate", "sentence-transformers"]
+
 [dependency-groups]
 # Pinned below 0.17 so the lint baseline is reproducible: ruff adds/changes
 # rules across minor releases, so an unpinned upgrade could surface new
@@ -41,7 +47,7 @@ target-version = "py312"
 select = ["E4", "E7", "E9", "F", "I", "B", "UP", "ISC", "DTZ"]
 
 [tool.ruff.lint.isort]
-known-first-party = ["constants", "helper", "main", "pipeline", "data", "model", "stages", "training"]
+known-first-party = ["constants", "device", "findings", "findings_view", "helper", "main", "pipeline", "progress", "validation_checks", "data", "eval", "model", "stages", "training"]
 # The `datasets/` output directory collides with the third-party `datasets`
 # library name, so ruff's filesystem detection misreads it as first-party.
 known-third-party = ["datasets"]
