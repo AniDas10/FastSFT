@@ -82,6 +82,15 @@ addopts = "--import-mode=importlib"
 markers = [
     "live: hits real external services (OpenRouter) or trains locally; skipped unless --run-live.",
 ]
+# Silence distilabel's library-internal deprecation noise (Pydantic 2.11
+# `model_fields`-on-instance access + the deprecated `distilabel.llms` import) so
+# the test summary shows only warnings we can act on. Runtime uses the same
+# filters via fastsft.warnings_filter; repeated here because tests don't import it.
+filterwarnings = [
+    "ignore::pydantic.warnings.PydanticDeprecationWarning",
+    "ignore::pydantic.warnings.UnsupportedFieldAttributeWarning",
+    "ignore::DeprecationWarning:distilabel",
+]
 # Coverage is opt-in (add --cov=fastsft) so the default run stays fast; the
 # [tool.coverage] config below applies whenever it is requested.
 
