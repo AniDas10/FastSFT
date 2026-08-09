@@ -76,6 +76,12 @@ testpaths = ["tests"]
 # lets same-named files (test_config.py, test_constants.py) coexist across those
 # mirrored dirs without __init__.py packaging.
 addopts = "--import-mode=importlib"
+# `live` marks Tier-4 tests that hit real OpenRouter / train locally; they are
+# skipped unless `--run-live` (wired in tests/conftest.py). Registered here so
+# `--strict-markers` stays happy and `pytest --markers` documents it.
+markers = [
+    "live: hits real external services (OpenRouter) or trains locally; skipped unless --run-live.",
+]
 # Coverage is opt-in (add --cov=fastsft) so the default run stays fast; the
 # [tool.coverage] config below applies whenever it is requested.
 

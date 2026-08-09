@@ -12,6 +12,32 @@ so the pure-logic test tiers run without loading the ML import graph.
 
 import pytest
 
+# --- Live-test gating ---------------------------------------------------------
+# Tiers 0-3 fake every external edge, so the default run is fully hermetic.
+# Tier 4 tests that make REAL OpenRouter calls / train locally are marked
+# `@pytest.mark.live` and skipped unless `--run-live` is passed, so `pytest`
+# (and CI) never bills a provider or spins a GPU by accident. Run them with:
+#   pytest --run-live
+
+
+def pytest_addoption(parser):
+    parser.addoption(
+        "--run-live",
+        action="store_true",
+        default=False,
+        help="Run @pytest.mark.live tests (real OpenRouter calls / local "
+        "training). Off by default.",
+    )
+
+
+def pytest_collection_modifyitems(config, items):
+    if config.getoption("--run-live"):
+        return
+    skip_live = pytest.mark.skip(reason="live test; pass --run-live to run")
+    for item in items:
+        if "live" in item.keywords:
+            item.add_marker(skip_live)
+
 
 class FakeJudge:
     """Stand-in for fastsft.model.judge.Judge with scripted results -- no
