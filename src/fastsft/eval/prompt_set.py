@@ -11,11 +11,12 @@ import random
 
 from datasets import Dataset
 
-from fastsft.constants import DEFAULT_OUTPUT_DIR, EVAL_PROMPTS_SUBDIR, RAW_OUTPUT_SUBDIR
+from fastsft.constants import EVAL_PROMPTS_SUBDIR, RAW_OUTPUT_SUBDIR
 from fastsft.data.constants import BREADTH_EXPONENT
 from fastsft.data.prompt_generator import PromptGenerator, seed_count
 from fastsft.helper import (
     convert_to_distiset,
+    datasets_dir,
     latest_run_path,
     load_data,
     matched_raw_run,
@@ -39,7 +40,7 @@ def load_training_prompts(adapter_dir: str) -> list[str]:
     DataGenerator share the pipeline's run id), else falls back to the latest
     raw run so eval still works against an adapter trained elsewhere.
     """
-    raw_root = os.path.join(DEFAULT_OUTPUT_DIR, RAW_OUTPUT_SUBDIR)
+    raw_root = os.path.join(datasets_dir(), RAW_OUTPUT_SUBDIR)
     path = matched_raw_run(adapter_dir) or latest_run_path(raw_root)
 
     distiset = load_data(path)
@@ -110,6 +111,6 @@ class EvalPromptSet:
     def load(cls, path: str | None = None) -> "EvalPromptSet":
         """Loads a saved set (default: the latest under datasets/eval_prompts/)."""
         if path is None:
-            path = latest_run_path(os.path.join(DEFAULT_OUTPUT_DIR, EVAL_PROMPTS_SUBDIR))
+            path = latest_run_path(os.path.join(datasets_dir(), EVAL_PROMPTS_SUBDIR))
         distiset = load_data(path)
         return cls(list(distiset["default"]["train"][PROMPT_COLUMN]))

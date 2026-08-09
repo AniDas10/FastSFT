@@ -1,12 +1,14 @@
 import fastsft.warnings_filter  # noqa: F401
 
 import argparse
+import os
 
 from fastsft.constants import (
     DEFAULT_CHILD_MODEL_ID,
     DEFAULT_GUIDE_MODEL,
     DEFAULT_JUDGE_MODEL,
     DEFAULT_PARENT_MODEL,
+    OUTPUT_DIR_ENV_VAR,
 )
 from fastsft.data.config import DataGenerationConfig, ParentGenerationConfig
 from fastsft.data.constants import (
@@ -107,6 +109,13 @@ def _input_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
         "--child-model-id",
         default=DEFAULT_CHILD_MODEL_ID,
         help="Hugging Face repo id of the target/child model to format for and fine-tune.",
+    )
+    parser.add_argument(
+        "--output-dir",
+        default=None,
+        help="Base directory for the datasets/ and modelsets/ output folders "
+        f"(default: the current directory). Sets {OUTPUT_DIR_ENV_VAR} for this "
+        "run; pass the same value to fastsft-eval to evaluate the result.",
     )
     parser.add_argument(
         "--start-stage",
@@ -235,6 +244,8 @@ def main():
     args = _input_args(parser)
     validate_start_stage(args, parser)
     validate_training_flags(args, parser)
+    if args.output_dir:
+        os.environ[OUTPUT_DIR_ENV_VAR] = args.output_dir
 
     pipeline_input = (
         args.prompt if args.start_stage == STAGE_ORDER[0] else load_data(args.input_path)

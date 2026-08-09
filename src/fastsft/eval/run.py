@@ -10,11 +10,12 @@ to the adapter. View the result with `python -m fastsft.eval.results_viewer`.
 import fastsft.warnings_filter  # noqa: F401
 
 import argparse
+import os
 
 from fastsft.constants import (
     DEFAULT_JUDGE_MODEL,
     DEFAULT_PARENT_MODEL,
-    MODELSETS_OUTPUT_DIR,
+    OUTPUT_DIR_ENV_VAR,
 )
 from fastsft.data.constants import DEFAULT_PARENT_TEMPERATURE
 from fastsft.eval.config import EvalConfig
@@ -30,6 +31,7 @@ from fastsft.helper import (
     current_timestamp,
     latest_run_path,
     load_training_metadata,
+    modelsets_dir,
 )
 from fastsft.model.base import Model
 from fastsft.model.constants import DEFAULT_MAX_TOKENS
@@ -149,6 +151,13 @@ def _input_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
         action="store_true",
         help="Judge each pair in one A/B order only (skip position-bias debiasing).",
     )
+    parser.add_argument(
+        "--output-dir",
+        default=None,
+        help="Base directory holding datasets/ and modelsets/ (default: the "
+        "current directory). Point this at the same location used for training "
+        f"so the adapter is found. Sets {OUTPUT_DIR_ENV_VAR} for this run.",
+    )
     return parser.parse_args()
 
 
@@ -159,8 +168,10 @@ def main():
     )
     args = _input_args(parser)
     validate_eval_flags(args, parser)
+    if args.output_dir:
+        os.environ[OUTPUT_DIR_ENV_VAR] = args.output_dir
 
-    adapter_dir = args.adapter_dir or latest_run_path(MODELSETS_OUTPUT_DIR)
+    adapter_dir = args.adapter_dir or latest_run_path(modelsets_dir())
     log(f"Evaluating adapter '{adapter_dir}'.")
 
     parent_model, parent_instruction, parent_max_tokens, parent_temperature = (

@@ -16,10 +16,9 @@ import argparse
 from rich.console import Console
 from rich.panel import Panel
 
-from fastsft.constants import MODELSETS_OUTPUT_DIR
 from fastsft.eval.constants import DEFAULT_MAX_NEW_TOKENS
 from fastsft.eval.inference import ChildInferenceEngine
-from fastsft.helper import latest_run_path
+from fastsft.helper import latest_run_path, modelsets_dir
 
 console = Console()
 
@@ -72,7 +71,7 @@ def main():
     )
     args = _input_args(parser)
 
-    adapter_dir = args.adapter_dir or latest_run_path(MODELSETS_OUTPUT_DIR)
+    adapter_dir = args.adapter_dir or latest_run_path(modelsets_dir())
     engine = ChildInferenceEngine(adapter_dir, max_new_tokens=args.max_new_tokens)
 
     tuned = engine.generate_tuned([args.prompt])[0]

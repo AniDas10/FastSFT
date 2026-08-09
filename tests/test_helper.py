@@ -8,16 +8,20 @@ from datasets import Dataset
 
 from fastsft.constants import (
     DEFAULT_OUTPUT_DIR,
+    MODELSETS_OUTPUT_DIR,
+    OUTPUT_DIR_ENV_VAR,
     RAW_OUTPUT_SUBDIR,
     TRAINING_METADATA_FILENAME,
 )
 from fastsft.helper import (
     convert_to_distiset,
     current_timestamp,
+    datasets_dir,
     latest_run_path,
     load_data,
     load_training_metadata,
     matched_raw_run,
+    modelsets_dir,
     save_distiset,
     save_training_metadata,
 )
@@ -131,6 +135,36 @@ def test_training_metadata_load_none_when_sidecar_absent(tmp_path, monkeypatch):
     run_id = "20260101_000000"
     _make_raw_run(tmp_path, run_id)  # raw run exists, but no sidecar written
     assert load_training_metadata(f"modelsets/{run_id}") is None
+
+
+def test_output_dirs_default_to_cwd_relative(monkeypatch):
+    monkeypatch.delenv(OUTPUT_DIR_ENV_VAR, raising=False)
+    # Unset -> plain relative names, so running from the repo is unchanged.
+    assert datasets_dir() == DEFAULT_OUTPUT_DIR
+    assert modelsets_dir() == MODELSETS_OUTPUT_DIR
+
+
+def test_output_dirs_honor_env_var(monkeypatch, tmp_path):
+    monkeypatch.setenv(OUTPUT_DIR_ENV_VAR, str(tmp_path))
+    assert datasets_dir() == str(tmp_path / DEFAULT_OUTPUT_DIR)
+    assert modelsets_dir() == str(tmp_path / MODELSETS_OUTPUT_DIR)
+
+
+def test_save_distiset_writes_under_output_root(monkeypatch, tmp_path):
+    # A redirected root sends run artifacts outside the CWD, and they reload.
+    monkeypatch.setenv(OUTPUT_DIR_ENV_VAR, str(tmp_path))
+    distiset = convert_to_distiset(Dataset.from_dict({"text": ["x"]}))
+    path = save_distiset(distiset, RAW_OUTPUT_SUBDIR, "20260101_000000")
+    assert path == str(tmp_path / DEFAULT_OUTPUT_DIR / RAW_OUTPUT_SUBDIR / "20260101_000000")
+    assert load_data(path)["default"]["train"]["text"] == ["x"]
+
+
+def test_matched_raw_run_honors_output_root(monkeypatch, tmp_path):
+    monkeypatch.setenv(OUTPUT_DIR_ENV_VAR, str(tmp_path))
+    run_id = "20260101_000000"
+    (tmp_path / DEFAULT_OUTPUT_DIR / RAW_OUTPUT_SUBDIR / run_id).mkdir(parents=True)
+    matched = matched_raw_run(f"modelsets/{run_id}")
+    assert matched == str(tmp_path / DEFAULT_OUTPUT_DIR / RAW_OUTPUT_SUBDIR / run_id)
 
 
 def test_training_metadata_sidecar_does_not_break_distiset_reload(tmp_path, monkeypatch):

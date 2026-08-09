@@ -13,7 +13,7 @@ from fastsft.constants import (
     FORMATTED_OUTPUT_SUBDIR,
     RAW_OUTPUT_SUBDIR,
 )
-from fastsft.helper import latest_run_path, load_data
+from fastsft.helper import datasets_dir, latest_run_path, load_data
 
 console = Console()
 
@@ -32,7 +32,7 @@ class DataViewer:
     def __init__(self, path: str | None = None, kind: str = "raw"):
         if path is None:
             subdir = FORMATTED_OUTPUT_SUBDIR if kind == "formatted" else RAW_OUTPUT_SUBDIR
-            path = latest_run_path(os.path.join(DEFAULT_OUTPUT_DIR, subdir))
+            path = latest_run_path(os.path.join(datasets_dir(), subdir))
         distiset = load_data(path)
         self.dataset = distiset["default"]["train"]
 

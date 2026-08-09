@@ -10,7 +10,7 @@ from dataclasses import asdict
 
 from distilabel.distiset import Distiset
 
-from fastsft.constants import MODELSETS_OUTPUT_DIR
+from fastsft.helper import modelsets_dir
 from fastsft.stages.base import Stage
 from fastsft.stages.constants import FINE_TUNER
 from fastsft.training.config import AdapterConfig, TrainingConfig, TrainingLoopConfig
@@ -146,8 +146,8 @@ class FineTuner(Stage):
 
     def save_output(self, output: str, run_id: str) -> str:
         """Copies the downloaded adapter directory into
-        MODELSETS_OUTPUT_DIR/run_id and returns that path."""
-        destination = os.path.join(MODELSETS_OUTPUT_DIR, run_id)
+        modelsets_dir()/run_id and returns that path."""
+        destination = os.path.join(modelsets_dir(), run_id)
         shutil.copytree(output, destination, dirs_exist_ok=True)
         return destination
 

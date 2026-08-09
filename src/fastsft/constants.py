@@ -4,6 +4,12 @@ Model-mechanics constants live in model/constants.py and data-generation
 tuning in data/constants.py.
 """
 
+# Base directory holding `datasets/` and `modelsets/`. Overridable via the
+# OUTPUT_DIR_ENV_VAR env var or the --output-dir CLI flag, so an installed
+# fastsft can write outside the current directory (resolved by helper.py's
+# datasets_dir()/modelsets_dir()). Empty/unset means the current directory, so
+# running from the repo is unchanged.
+OUTPUT_DIR_ENV_VAR = "FASTSFT_OUTPUT_DIR"
 DEFAULT_OUTPUT_DIR = "datasets"
 RAW_OUTPUT_SUBDIR = "raw"
 FORMATTED_OUTPUT_SUBDIR = "formatted"
