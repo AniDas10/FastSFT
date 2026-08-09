@@ -20,6 +20,13 @@ def log(message: str) -> None:
     console.print(message, markup=False, highlight=False)
 
 
+def rule(title: str, *, style: str = "cyan") -> None:
+    """A full-width partition rule with a centered title (rich Console.rule),
+    used to bracket each pipeline stage's output, e.g. ---- Data Generation ----.
+    `title` is trusted (a fixed stage label), so markup styling is left on."""
+    console.rule(f"[{style}]{title}[/]", style=style)
+
+
 class ProgressLogger:
     """Verbosity-gated progress logging over the shared console -- the `_log`
     helper shared by Stage and Evaluator (inherit this, call self._log)."""
