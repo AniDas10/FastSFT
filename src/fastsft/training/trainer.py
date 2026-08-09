@@ -165,7 +165,7 @@ def run_sft(
     model = AutoModelForCausalLM.from_pretrained(
         child_model_id,
         quantization_config=quantization_config,
-        torch_dtype=torch_dtype,
+        dtype=torch_dtype,
         device_map=device_map,
     )
     model = get_peft_model(
