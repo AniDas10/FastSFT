@@ -61,6 +61,30 @@ see §7.)
 
 ---
 
+## 2b. How to Write Your Prompt
+
+Your prompt is the seed. **Be verbose and explicit** — vague prompts produce vague data.
+
+**Bad prompts:**
+- "a pirate"
+- "be an engineer"
+- "sound smart"
+
+**Good prompts:**
+- "Respond as a friendly pirate to ANY question: use nautical slang, casual tone, always stay in character"
+- "Respond like a pragmatic engineer to ANY topic: break problems into steps, explain trade-offs, assume technical knowledge"
+- "Talk like a poet: rich metaphors, emotional depth, elegant prose, but never pretentious or flowery"
+
+**What to include:**
+1. **Role/persona** — who should the model act as?
+2. **Key traits** — what defines their voice? (tone, vocabulary, approach)
+3. **Scope** — "to ANY question" (learns across all topics) vs. "to medical questions" (stays in domain)
+4. **Examples** — what should they do/avoid?
+
+See [data_generation_tutorial.md](data_generation_tutorial.md#crafting-effective-prompts) for more examples and a checklist.
+
+---
+
 ## 3. Your first run
 
 ```bash
@@ -177,23 +201,43 @@ To force a specific GPU: `--gpu-tier A100-40GB`.
 
 ---
 
-## 8. Restarting from the middle
+## 8. Inspect, Edit, and Resume
 
-Because every stage saves its output, you can re-run just the parts you need
-instead of regenerating data every time:
+Data generation is expensive (API calls cost $). Before spending more, inspect and fix:
 
 ```bash
-# reuse an existing dataset, just re-format + re-train
+# 1. View the raw Q&A pairs
+uv run python -m fastsft.data.viewer
+
+# 2. If quality is good → skip to training
+uv run fastsft --start-stage fine_tuner --input-path datasets/formatted/<timestamp> --local
+
+# 3. If quality needs fixing → edit the Parquet file and resume
+python3 << 'EOF'
+from datasets import load_dataset
+
+# Load the raw data
+ds = load_dataset("parquet", data_files="datasets/raw/<timestamp>/train/data-00000-of-00001.parquet")
+df = ds["train"].to_pandas()
+
+# Remove or fix bad samples
+df = df.drop([5, 12, 23])  # Remove samples 5, 12, 23 (bad quality)
+df.loc[0, "generation"] = "Better answer here..."  # Fix sample 0
+
+# Save back
+df.to_parquet("datasets/raw/<timestamp>/train/data-00000-of-00001.parquet")
+EOF
+
+# 4. Resume from formatting (skip generation, format the edited data)
 uv run fastsft --start-stage data_formatter --input-path datasets/raw/<timestamp>
 
-# reuse formatted data, just re-train (e.g. try a higher LoRA rank)
-uv run fastsft --start-stage fine_tuner --input-path datasets/formatted/<timestamp> \
-  --local --lora-rank 32
+# 5. Then train
+uv run fastsft --start-stage fine_tuner --input-path datasets/formatted/<timestamp> --local
 ```
 
-Data generation is the slow, expensive part (lots of API calls). Once you've
-got a dataset you like, iterate on training from `--start-stage fine_tuner` and
-you'll move much faster.
+This workflow saves $1-2 per iteration by avoiding regeneration. See
+[data_generation_tutorial.md](data_generation_tutorial.md#advanced-manually-edit--resume)
+for the full guide.
 
 ---
 
