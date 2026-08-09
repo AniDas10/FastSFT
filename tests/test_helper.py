@@ -18,6 +18,7 @@ from fastsft.helper import (
     load_data,
     load_training_metadata,
     matched_raw_run,
+    save_distiset,
     save_training_metadata,
 )
 
@@ -130,3 +131,30 @@ def test_training_metadata_load_none_when_sidecar_absent(tmp_path, monkeypatch):
     run_id = "20260101_000000"
     _make_raw_run(tmp_path, run_id)  # raw run exists, but no sidecar written
     assert load_training_metadata(f"modelsets/{run_id}") is None
+
+
+def test_training_metadata_sidecar_does_not_break_distiset_reload(tmp_path, monkeypatch):
+    """Regression: the provenance sidecar must sit BESIDE the run dir, not inside
+    it. Distiset.load_from_disk treats every entry in the run dir as a dataset
+    split, so a stray file inside breaks every reload of that run -- which eval's
+    prompt-set lookup and `--start-stage` re-runs depend on."""
+    monkeypatch.chdir(tmp_path)
+    run_id = "20260101_000000"
+    messages = [[{"role": "user", "content": "hi"}]]
+    distiset = convert_to_distiset(Dataset.from_dict({"messages": messages}))
+    run_dir = save_distiset(distiset, RAW_OUTPUT_SUBDIR, run_id)
+
+    save_training_metadata(
+        run_dir,
+        parent_model="meta-llama/llama-3.3-70b-instruct",
+        parent_instruction="Answer like a mathematician.",
+        parent_max_tokens=1024,
+        parent_temperature=0.9,
+    )
+
+    # The saved run still reloads cleanly with the sidecar present...
+    reloaded = load_data(run_dir)
+    assert reloaded["default"]["train"]["messages"] == messages
+    # ...and the provenance still round-trips, matched by run id.
+    loaded = load_training_metadata(f"modelsets/{run_id}")
+    assert loaded["parent_model"] == "meta-llama/llama-3.3-70b-instruct"

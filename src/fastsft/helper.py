@@ -69,10 +69,18 @@ def matched_raw_run(adapter_dir: str) -> str | None:
     return path if os.path.isdir(path) else None
 
 
+def _training_metadata_path(run_dir: str) -> str:
+    """The provenance sidecar path for a raw run: a SIBLING file next to the run
+    dir, never a file inside it. Distiset.load_from_disk treats every entry in
+    the run dir as a dataset split, so a stray file inside would break every
+    reload of that run (eval's prompt-set lookup, `--start-stage` re-runs)."""
+    return os.path.normpath(run_dir) + "." + TRAINING_METADATA_FILENAME
+
+
 def save_training_metadata(run_dir: str, **fields) -> str:
     """Writes `fields` (training provenance, e.g. parent model/instruction) as a
-    JSON sidecar in `run_dir`; returns the path."""
-    path = os.path.join(run_dir, TRAINING_METADATA_FILENAME)
+    JSON sidecar beside `run_dir`; returns the path."""
+    path = _training_metadata_path(run_dir)
     with open(path, "w") as f:
         json.dump(fields, f, indent=2)
     return path
@@ -85,7 +93,7 @@ def load_training_metadata(adapter_dir: str) -> dict | None:
     raw = matched_raw_run(adapter_dir)
     if raw is None:
         return None
-    path = os.path.join(raw, TRAINING_METADATA_FILENAME)
+    path = _training_metadata_path(raw)
     if not os.path.exists(path):
         return None
     with open(path) as f:
