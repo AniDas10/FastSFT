@@ -12,7 +12,7 @@ Also runnable directly to report what this machine offers:
 
 
 def detect_device() -> str:
-    """Returns 'cuda', 'mps', or 'cpu' -- whichever this machine actually has."""
+    """Detect 'cuda', 'mps', or 'cpu' on this machine."""
     import torch
 
     if torch.cuda.is_available():
@@ -23,16 +23,14 @@ def detect_device() -> str:
 
 
 def dtype_for_device(device: str):
-    """The torch dtype to load models in on `device`: bf16 on a real accelerator
-    (cuda/mps), fp32 on cpu. (fp32 on mps is unstable in some torch builds, so
-    accelerators use bf16 consistently.)"""
+    """Return torch dtype for device: bf16 on accelerators (cuda/mps), fp32 on cpu."""
     import torch
 
     return torch.bfloat16 if device in ("cuda", "mps") else torch.float32
 
 
 def main():
-    """Reports the detected device and the dtype models will load in."""
+    """Report detected device, dtype, and torch version."""
     device = detect_device()
     print(f"Device: {device}")
     print(f"Dtype:  {dtype_for_device(device)}")

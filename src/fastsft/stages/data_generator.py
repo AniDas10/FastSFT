@@ -59,8 +59,6 @@ class DataGenerator(Stage):
         self._score_threshold = score_threshold
         self._parent_temperature = parent_temperature
         self._parent_max_tokens = parent_max_tokens
-        # The Guide-derived style prompt, captured in _run so save_output can
-        # persist it as this run's teacher provenance (for evaluation to reuse).
         self._parent_instruction: str | None = None
 
     def _validate_input(self, prompt: str) -> None:
@@ -122,9 +120,6 @@ class DataGenerator(Stage):
 
     def save_output(self, output: Distiset, run_id: str) -> str:
         path = save_distiset(output, RAW_OUTPUT_SUBDIR, run_id)
-        # Record this run's teacher -- identity, style prompt, and generation
-        # recipe -- alongside the dataset, so evaluation reconstructs the true
-        # parent reference (answering like the actual teacher) instead of guessing.
         save_training_metadata(
             path,
             parent_model=self._parent_model,
@@ -135,8 +130,7 @@ class DataGenerator(Stage):
         return path
 
     def _setup(self, prompt: str) -> GuideInstructions:
-        """Builds the guide (output budget scaled to the seed count) and
-        derives its instructions."""
+        """Create guide and derive instructions from the prompt."""
         num_seeds = seed_count(self._num_samples, breadth_exponent=self._breadth_exponent)
         guide = Guide(
             model_id=self._guide_model,

@@ -20,15 +20,7 @@ from fastsft.training.modal_app import adapter_volume, train_lora
 
 
 class FineTuner(Stage):
-    """Fine-tunes the child model via LoRA/QLoRA SFT, on Modal or locally.
-
-    Uses `training_config` if the caller supplies one; otherwise, if
-    `local_training`, trains on this machine with default adapter/loop
-    settings (no Modal-tier cost heuristic -- there's only one "tier": this
-    machine); otherwise ranks Modal GPU tier candidates by cost/feasibility
-    (see training.heuristic) and takes the cheapest feasible one. Either
-    way, carves a validation split for early stopping first.
-    """
+    """LoRA/QLoRA SFT on child model, locally or on Modal cloud GPUs."""
 
     name = FINE_TUNER
     title = "Fine-Tuning Stage"
@@ -55,9 +47,6 @@ class FineTuner(Stage):
             )
 
     def _run(self, formatted_distiset: Distiset) -> str:
-        # Resolved before splitting: the heuristic measures sequence lengths
-        # from the full dataset, and the resolved config's own
-        # loop.validation_split then decides how the split is carved.
         chosen = self._resolve_training_config(formatted_distiset)
         train_ds, eval_ds = self._split_validation(
             formatted_distiset, chosen.loop.validation_split
@@ -104,9 +93,7 @@ class FineTuner(Stage):
         return adapter_dir
 
     def _resolve_training_config(self, formatted_distiset: Distiset) -> TrainingConfig:
-        """Uses the caller-supplied TrainingConfig if given; otherwise, for
-        local training, defaults (no Modal tier to rank); otherwise ranks
-        candidates via the cost heuristic and takes the cheapest feasible one."""
+        """Resolve training config: caller-supplied, local defaults, or cost-ranked."""
         if self._training_config is not None:
             self._log(
                 f"[1/3] Using caller-supplied config: "
@@ -145,22 +132,19 @@ class FineTuner(Stage):
         return chosen
 
     def save_output(self, output: str, run_id: str) -> str:
-        """Copies the downloaded adapter directory into
-        modelsets_dir()/run_id and returns that path."""
+        """Copy adapter to modelsets_dir()/run_id."""
         destination = os.path.join(modelsets_dir(), run_id)
         shutil.copytree(output, destination, dirs_exist_ok=True)
         return destination
 
     def _split_validation(self, distiset: Distiset, validation_split: float):
-        """Carves a held-out validation slice from the formatted dataset,
-        for the Modal job's early stopping to monitor."""
+        """Hold out validation slice for early stopping."""
         train = distiset["default"]["train"]
         split = train.train_test_split(test_size=validation_split, seed=42)
         return split["train"], split["test"]
 
     def _download_adapter(self, tar_path: str) -> str:
-        """Downloads the trained adapter tarball from the Modal Volume and
-        extracts it to a local temp directory; returns that path."""
+        """Download and extract adapter tarball from Modal Volume."""
         fd, local_tar_path = tempfile.mkstemp(suffix=".tar.gz")
         with os.fdopen(fd, "wb") as f:
             for chunk in adapter_volume.read_file(tar_path):

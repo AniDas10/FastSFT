@@ -18,11 +18,8 @@ class Verdict(BaseModel):
 
 
 class Judge(Model):
-    """Evaluates arbitrary text samples against an instruction/prompt: absolute
-    numeric scoring, failed-sample counting, and pairwise comparison.
-    """
+    """Score samples, count failures, and compare pairs pairwise."""
 
-    # Verdicts filter the dataset but never enter it; exempt from open-weight.
     _enforce_open_weight = False
 
     def __init__(
@@ -39,7 +36,7 @@ class Judge(Model):
     def score_samples(
         self, samples: dict[str, str], prompt: str | None = None
     ) -> dict[str, float]:
-        """Scores each sample in `samples` (id -> text). Returns id -> score."""
+        """Score samples (id -> text); return id -> score."""
         instruction = prompt if prompt is not None else self.get_instruction()
         data = [{"id": id_, "instruction": text} for id_, text in samples.items()]
 
@@ -58,20 +55,13 @@ class Judge(Model):
     def failed_sample_count(
         self, scores: list[float], threshold: float = DEFAULT_SCORE_THRESHOLD
     ) -> int:
-        """Returns how many of `scores` fall below `threshold`."""
+        """Return count of scores below threshold."""
         return sum(1 for score in scores if score < threshold)
 
     def compare_samples(
         self, pairs: dict[str, tuple[str, str, str]], prompt: str | None = None
     ) -> dict[str, Verdict]:
-        """Pairwise-compares two candidate answers to the same question.
-
-        `pairs` maps id -> (question, answer_a, answer_b); returns id -> Verdict
-        naming the better answer ("A"/"B") or a "tie". The comparison rubric is
-        the caller-supplied `prompt` (else this role's instruction) -- the same
-        pattern as `score_samples`. Callers cancel position bias by comparing
-        each pair a second time with A/B swapped.
-        """
+        """Compare pairs of answers; return id -> Verdict ("A", "B", or "tie")."""
         data = [
             {"id": id_, "instruction": self._comparison_prompt(question, a, b)}
             for id_, (question, a, b) in pairs.items()

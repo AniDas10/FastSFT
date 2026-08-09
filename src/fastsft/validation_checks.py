@@ -10,9 +10,7 @@ from fastsft.stages.constants import STAGE_ORDER
 
 
 def validate_start_stage(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    """--start-stage=STAGE_ORDER[0] (default) requires a prompt and no
-    --input-path; any other --start-stage requires --input-path and no prompt.
-    """
+    """Validate prompt/input-path rules for each --start-stage."""
     first_stage = STAGE_ORDER[0]
     if args.start_stage == first_stage:
         if not (args.prompt and args.prompt.strip()):
@@ -30,12 +28,7 @@ def validate_start_stage(args: argparse.Namespace, parser: argparse.ArgumentPars
 
 
 def validate_training_flags(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    """--gpu-tier (dispatch to Modal) and --local (train on this machine) are
-    mutually exclusive training destinations. The adapter/loop override flags
-    are only meaningful alongside one of them -- using one without either is
-    likely a mistake, not a silent no-op. --modal-timeout is Modal-specific,
-    so it requires --gpu-tier specifically (not satisfied by --local alone).
-    """
+    """Validate --gpu-tier/--local mutual exclusivity and override-flag dependencies."""
     if args.gpu_tier is not None and args.local:
         parser.error("--gpu-tier and --local are mutually exclusive.")
 
@@ -64,6 +57,6 @@ def validate_training_flags(args: argparse.Namespace, parser: argparse.ArgumentP
 
 
 def validate_eval_flags(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
-    """--num-eval-prompts sizes a freshly generated eval set, so it must be positive."""
+    """Validate that --num-eval-prompts is positive."""
     if args.num_eval_prompts <= 0:
         parser.error(f"--num-eval-prompts must be positive, got {args.num_eval_prompts}.")
