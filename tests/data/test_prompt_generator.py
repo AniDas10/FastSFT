@@ -90,7 +90,7 @@ def test_row_prompt_names_the_seed_and_exact_count():
 
 # --- generate (top-up loop, fake model) -------------------------------------
 
-class FakeModel:
+class _FakeModel:
     """Returns, per pass, exactly `per_pass` prompts for each allocated row.
 
     Mimics Model.run_pipeline's Distiset shape and assert_structured_output.
@@ -120,7 +120,7 @@ class FakeModel:
 
 
 def test_generate_returns_exactly_num_samples_in_one_pass():
-    model = FakeModel()  # delivers the full requested count each row
+    model = _FakeModel()  # delivers the full requested count each row
     gen = PromptGenerator(model=model, num_samples=6)
 
     prompts = gen.generate(["a", "b", "c"])
@@ -131,7 +131,7 @@ def test_generate_returns_exactly_num_samples_in_one_pass():
 
 def test_generate_tops_up_across_passes_when_underdelivering():
     # Each row yields at most 1 prompt/pass, so 4 samples need several passes.
-    model = FakeModel(per_pass=1)
+    model = _FakeModel(per_pass=1)
     gen = PromptGenerator(model=model, num_samples=4)
 
     prompts = gen.generate(["a", "b"])
@@ -142,7 +142,7 @@ def test_generate_tops_up_across_passes_when_underdelivering():
 
 def test_generate_caps_prompts_at_requested_count_per_row():
     # Model returns MORE than asked; generate must slice to the row's count.
-    class OverDelivering(FakeModel):
+    class OverDelivering(_FakeModel):
         def run_pipeline(self, data, system_prompt, structured_output=None, name=""):
             self.calls += 1
             rows = []
@@ -160,7 +160,7 @@ def test_generate_caps_prompts_at_requested_count_per_row():
 
 def test_generate_raises_after_max_attempts_when_never_enough():
     # Zero prompts per pass -> deficit never closes -> RuntimeError.
-    model = FakeModel(per_pass=0)
+    model = _FakeModel(per_pass=0)
     gen = PromptGenerator(model=model, num_samples=3)
 
     with pytest.raises(RuntimeError, match=r"0/3 instructions after 5 attempts"):
@@ -169,7 +169,7 @@ def test_generate_raises_after_max_attempts_when_never_enough():
 
 
 def test_generate_rejects_empty_seeds():
-    gen = PromptGenerator(model=FakeModel(), num_samples=3)
+    gen = PromptGenerator(model=_FakeModel(), num_samples=3)
     with pytest.raises(ValueError, match="at least one seed"):
         gen.generate([])
 
