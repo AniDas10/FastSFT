@@ -15,6 +15,7 @@ class DataFormatter(Stage):
     """
 
     name = DATA_FORMATTER
+    title = "Data Formatting Stage"
 
     def __init__(self, child_model_id: str, verbose: bool = True):
         super().__init__(verbose=verbose)

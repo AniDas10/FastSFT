@@ -34,6 +34,7 @@ class DataGenerator(Stage):
     """
 
     name = DATA_GENERATOR
+    title = "Data Generation Stage"
 
     def __init__(
         self,

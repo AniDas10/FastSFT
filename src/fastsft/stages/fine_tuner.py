@@ -31,6 +31,7 @@ class FineTuner(Stage):
     """
 
     name = FINE_TUNER
+    title = "Fine-Tuning Stage"
 
     def __init__(
         self,

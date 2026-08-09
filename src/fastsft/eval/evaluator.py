@@ -18,7 +18,7 @@ from fastsft.eval.embeddings import pairwise_similarities
 from fastsft.eval.inference import ChildInferenceEngine
 from fastsft.model.base import Model
 from fastsft.model.judge import Judge
-from fastsft.progress import ProgressLogger
+from fastsft.progress import ProgressLogger, rule
 
 # Quality credited to the first answer for one verdict: a clear win, a tie, a
 # loss. Averaged across A/B-swapped orders into a per-prompt score.
@@ -40,9 +40,16 @@ class Evaluator(ProgressLogger):
         self._config = config
 
     def run(self, prompts: list[str]) -> dict:
-        """Validate the input, then run -- mirrors the Stage validate-then-run template."""
+        """Validate the input, then run -- mirrors the Stage validate-then-run
+        template, and brackets the run with a start/end partition rule so eval
+        reads like the pipeline stages regardless of caller (CLI or direct)."""
         self._validate_input(prompts)
-        return self._run(prompts)
+        if self._verbose:
+            rule("Evaluation")
+        results = self._run(prompts)
+        if self._verbose:
+            rule("Evaluation complete", style="dim")
+        return results
 
     def _validate_input(self, prompts: list[str]) -> None:
         if not prompts:
