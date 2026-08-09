@@ -4,3 +4,9 @@ __pycache__/
 *.pyc
 datasets/
 modelsets/
+
+# Coverage
+.coverage
+.coverage.*
+htmlcov/
+coverage.xml
