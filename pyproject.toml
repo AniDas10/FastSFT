@@ -51,7 +51,14 @@ packages = ["src/fastsft"]
 # rules across minor releases); bump deliberately, re-running `ruff check .`.
 # pytest drives the test suite (import guardrail + the growing unit tiers);
 # pytest-cov reports which source lines/branches the tests actually exercised.
-dev = ["ruff>=0.16.1,<0.17", "pytest>=8.0", "pytest-cov>=5.0"]
+# mypy type-checks src/fastsft; see [tool.mypy] below for why it never needs
+# the ML extras installed to run.
+dev = [
+    "ruff>=0.16.1,<0.17",
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "mypy>=2.3.0",
+]
 
 [tool.ruff]
 # Matches requires-python; drives the pyupgrade (UP) rewrites' target syntax.
@@ -99,6 +106,32 @@ filterwarnings = [
 ]
 # Coverage is opt-in (add --cov=fastsft) so the default run stays fast; the
 # [tool.coverage] config below applies whenever it is requested.
+
+[tool.mypy]
+# Matches requires-python; drives which stdlib/typing syntax mypy accepts.
+python_version = "3.12"
+mypy_path = "src"
+files = ["src/fastsft"]
+# distilabel/modal/transformers/peft/etc are either unstubbed or only present
+# via the local-training/evaluation extras -- CI type-checks with just the dev
+# group installed (mirrors lint.yml), so every third-party import is treated
+# as untyped (Any) rather than mypy failing to find the module.
+ignore_missing_imports = true
+# Meaningful but not adversarial: catches real mistakes (bad returns, unused
+# ignores, missing-arg calls) without demanding annotations on every local.
+disallow_untyped_defs = true
+warn_return_any = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+check_untyped_defs = true
+
+[[tool.mypy.overrides]]
+# datasets ships no py.typed marker and its __init__ re-exports trip mypy's
+# module resolution (spurious "no attribute Dataset/DatasetDict" errors) even
+# though the names are real at runtime; skip analyzing it like an unstubbed
+# dependency rather than chasing its internals.
+module = ["datasets", "datasets.*"]
+follow_imports = "skip"
 
 [tool.coverage.run]
 branch = true

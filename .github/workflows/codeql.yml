@@ -1,0 +1,33 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    # Weekly scan catches newly-disclosed vulnerability patterns even when
+    # nothing in the repo changed.
+    - cron: "0 6 * * 1"
+
+jobs:
+  analyze:
+    name: Analyze (python)
+    runs-on: ubuntu-latest
+    permissions:
+      security-events: write
+      packages: read
+      actions: read
+      contents: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: github/codeql-action/init@v3
+        with:
+          languages: python
+          build-mode: none
+
+      - uses: github/codeql-action/analyze@v3
+        with:
+          category: "/language:python"

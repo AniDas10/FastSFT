@@ -1,0 +1,20 @@
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+      # Builds the sdist + wheel (dynamic version resolved from
+      # src/fastsft/__init__.py via hatchling) -- catches packaging
+      # regressions before the actual PyPI publish, which this does NOT do.
+      - run: uv build
+      # Validates package metadata (README rendering, classifiers, etc.)
+      # without uploading anywhere.
+      - run: uvx twine check dist/*
