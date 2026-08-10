@@ -1,0 +1,4 @@
+# Every file requires a review from @AniDas10 before it can merge into main
+# (paired with "Require review from Code Owners" + a push restriction to
+# AniDas10 in the main branch protection rule).
+* @AniDas10
