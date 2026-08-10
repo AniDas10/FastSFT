@@ -1,0 +1,13 @@
+version: 2
+updates:
+  # Project dependencies, pinned via uv.lock.
+  - package-ecosystem: "uv"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+
+  # The workflow actions themselves (actions/checkout, astral-sh/setup-uv, ...).
+  - package-ecosystem: "github-actions"
+    directory: "/"
+    schedule:
+      interval: "weekly"
