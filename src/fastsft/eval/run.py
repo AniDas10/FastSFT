@@ -11,6 +11,7 @@ import fastsft.warnings_filter  # noqa: F401
 
 import argparse
 import os
+from argparse import Namespace
 
 from fastsft.constants import (
     DEFAULT_JUDGE_MODEL,
@@ -39,7 +40,7 @@ from fastsft.progress import log
 from fastsft.validation_checks import validate_eval_flags
 
 
-def _resolve_prompt_set(args, config: EvalConfig) -> EvalPromptSet:
+def _resolve_prompt_set(args: Namespace, config: EvalConfig) -> EvalPromptSet:
     """Loads an existing eval prompt set, or generates + persists a fresh one.
 
     Priority: an explicit --eval-prompts-path; else --regenerate-prompts forces
@@ -68,7 +69,7 @@ def _resolve_prompt_set(args, config: EvalConfig) -> EvalPromptSet:
     return prompt_set
 
 
-def _resolve_parent(args, adapter_dir: str) -> tuple[str, str, int, float]:
+def _resolve_parent(args: Namespace, adapter_dir: str) -> tuple[str, str, int, float]:
     """Resolves the parent teacher for the eval reference from training metadata:
     identity + style prompt (explicit flags win) and the generation recipe
     (max tokens + temperature, inferred so the reference answers like the actual
@@ -161,7 +162,7 @@ def _input_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Evaluate a fine-tuned child adapter against its untuned base "
         "and its parent teacher (LLM-judge win rates + parent similarity)."

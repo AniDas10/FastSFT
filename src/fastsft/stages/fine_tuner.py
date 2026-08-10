@@ -7,6 +7,7 @@ import tarfile
 import tempfile
 import uuid
 from dataclasses import asdict
+from typing import Any
 
 from distilabel.distiset import Distiset
 
@@ -60,7 +61,7 @@ class FineTuner(Stage):
             return self._run_local(chosen, train_ds, eval_ds)
         return self._run_modal(chosen, train_ds, eval_ds)
 
-    def _run_modal(self, chosen: TrainingConfig, train_ds, eval_ds) -> str:
+    def _run_modal(self, chosen: TrainingConfig, train_ds: Any, eval_ds: Any) -> str:
         self._log(f"[2/3] Dispatching training to Modal ({chosen.gpu_tier})...")
         job_id = uuid.uuid4().hex[:12]
         tar_path = train_lora.with_options(
@@ -79,7 +80,7 @@ class FineTuner(Stage):
         self._log(f"[3/3] Done: adapter downloaded to '{adapter_dir}'.")
         return adapter_dir
 
-    def _run_local(self, chosen: TrainingConfig, train_ds, eval_ds) -> str:
+    def _run_local(self, chosen: TrainingConfig, train_ds: Any, eval_ds: Any) -> str:
         from fastsft.training.local_trainer import train_locally
 
         self._log(f"[2/3] Training locally ({chosen.gpu_tier})...")
@@ -137,7 +138,7 @@ class FineTuner(Stage):
         shutil.copytree(output, destination, dirs_exist_ok=True)
         return destination
 
-    def _split_validation(self, distiset: Distiset, validation_split: float):
+    def _split_validation(self, distiset: Distiset, validation_split: float) -> tuple[Any, Any]:
         """Hold out validation slice for early stopping."""
         train = distiset["default"]["train"]
         split = train.train_test_split(test_size=validation_split, seed=42)

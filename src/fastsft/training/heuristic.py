@@ -263,7 +263,7 @@ def _print_shortlist(shortlist: list[TrainingConfig]) -> None:
     console.print(table)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Preview cost-ranked training configs for a child model, "
         "without running DataGenerator/DataFormatter/FineTuner."
@@ -286,6 +286,7 @@ def main():
     sample_texts = []
     if args.input_path:
         distiset = load_data(args.input_path)
+        assert distiset is not None, f"No dataset found at '{args.input_path}'."
         sample_texts = [row["text"] for row in distiset["default"]["train"]]
 
     source = f"{len(sample_texts)} real samples" if sample_texts else "no dataset -- rough preview"

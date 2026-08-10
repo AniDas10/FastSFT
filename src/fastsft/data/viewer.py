@@ -34,6 +34,7 @@ class DataViewer:
             subdir = FORMATTED_OUTPUT_SUBDIR if kind == "formatted" else RAW_OUTPUT_SUBDIR
             path = latest_run_path(os.path.join(datasets_dir(), subdir))
         distiset = load_data(path)
+        assert distiset is not None, f"No dataset found at '{path}'."
         self.dataset = distiset["default"]["train"]
 
     def raw_samples(self, n: int = 5) -> None:
@@ -63,7 +64,7 @@ class DataViewer:
             )
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(description="Preview samples from a saved distilabel dataset.")
     parser.add_argument(
         "--input-path",

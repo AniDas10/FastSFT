@@ -153,7 +153,7 @@ def render(stats: dict, adapter_dir: str) -> None:
     console.print(_interpretation(stats))
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Show a finished training run's loss curve and telemetry."
     )

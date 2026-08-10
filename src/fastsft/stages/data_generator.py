@@ -142,7 +142,7 @@ class DataGenerator(Stage):
         """Converts (instruction, generation) rows to the `messages` schema."""
         train = distiset["default"]["train"]
 
-        def convert(row):
+        def convert(row: dict) -> dict:
             return {
                 "messages": [
                     {"role": "user", "content": row["instruction"]},

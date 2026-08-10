@@ -10,6 +10,7 @@ Terminal rendering AND the `python -m` CLI live in eval/results_viewer.py
 import json
 import math
 import os
+from typing import cast
 
 from fastsft.eval.constants import EVAL_RESULTS_FILENAME
 from fastsft.findings import Finding
@@ -47,7 +48,7 @@ def load_results(adapter_dir: str) -> dict:
             "`python -m fastsft.eval.run [adapter_dir]` first."
         )
     with open(path) as f:
-        return json.load(f)
+        return cast(dict, json.load(f))
 
 
 def interpret(results: dict) -> list[Finding]:

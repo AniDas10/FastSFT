@@ -17,7 +17,7 @@ from fastsft.eval.constants import COMPARISON_JUDGE_INSTRUCTION, STYLE_JUDGE_INS
 from fastsft.eval.embeddings import pairwise_similarities
 from fastsft.eval.inference import ChildInferenceEngine
 from fastsft.model.base import Model
-from fastsft.model.judge import Judge
+from fastsft.model.judge import Judge, Verdict
 from fastsft.progress import ProgressLogger, rule
 
 # Quality credited to the first answer for one verdict: a clear win, a tie, a
@@ -148,18 +148,18 @@ class Evaluator(ProgressLogger):
         """
         ids = [str(i) for i in range(len(prompts))]
 
-        def verdicts_for(first: list[str], second: list[str]) -> dict:
+        def verdicts_for(first: list[str], second: list[str]) -> dict[str, Verdict]:
             """Judge one ordering: `first` in the 'A' slot, `second` in 'B'."""
             if references is None:
-                pairs = {
+                quality_pairs = {
                     i: (prompts[int(i)], first[int(i)], second[int(i)]) for i in ids
                 }
-                return judge.compare_samples(pairs, prompt=rubric)
-            pairs = {
+                return judge.compare_samples(quality_pairs, prompt=rubric)
+            reference_pairs = {
                 i: (prompts[int(i)], references[int(i)], first[int(i)], second[int(i)])
                 for i in ids
             }
-            return judge.compare_to_reference(pairs, prompt=rubric)
+            return judge.compare_to_reference(reference_pairs, prompt=rubric)
 
         # Order 1: a is presented as "A". Order 2 (swap): a is presented as "B".
         verdicts1 = verdicts_for(a_answers, b_answers)

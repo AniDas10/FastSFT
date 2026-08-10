@@ -44,6 +44,7 @@ def load_training_prompts(adapter_dir: str) -> list[str]:
     path = matched_raw_run(adapter_dir) or latest_run_path(raw_root)
 
     distiset = load_data(path)
+    assert distiset is not None, f"No raw run found at '{path}'."
     prompts: list[str] = []
     for row in distiset["default"]["train"]:
         for message in row.get("messages", []):
@@ -113,4 +114,5 @@ class EvalPromptSet:
         if path is None:
             path = latest_run_path(os.path.join(datasets_dir(), EVAL_PROMPTS_SUBDIR))
         distiset = load_data(path)
+        assert distiset is not None, f"No eval prompt set found at '{path}'."
         return cls(list(distiset["default"]["train"][PROMPT_COLUMN]))
