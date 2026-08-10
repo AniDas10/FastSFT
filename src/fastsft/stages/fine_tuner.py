@@ -17,7 +17,7 @@ from fastsft.stages.constants import FINE_TUNER
 from fastsft.training.config import AdapterConfig, TrainingConfig, TrainingLoopConfig
 from fastsft.training.constants import TOP_N_CONFIGS
 from fastsft.training.heuristic import recommend_configs
-from fastsft.training.modal_app import adapter_volume, train_lora
+from fastsft.training.modal_app import adapter_volume, app, train_lora
 
 
 class FineTuner(Stage):
@@ -64,15 +64,16 @@ class FineTuner(Stage):
     def _run_modal(self, chosen: TrainingConfig, train_ds: Any, eval_ds: Any) -> str:
         self._log(f"[2/3] Dispatching training to Modal ({chosen.gpu_tier})...")
         job_id = uuid.uuid4().hex[:12]
-        tar_path = train_lora.with_options(
-            gpu=chosen.gpu_tier, timeout=chosen.modal_timeout_seconds
-        ).remote(
-            child_model_id=self._child_model_id,
-            train_rows=train_ds.to_list(),
-            eval_rows=eval_ds.to_list(),
-            config=asdict(chosen),
-            run_id=job_id,
-        )
+        with app.run():
+            tar_path = train_lora.with_options(
+                gpu=chosen.gpu_tier, timeout=chosen.modal_timeout_seconds
+            ).remote(
+                child_model_id=self._child_model_id,
+                train_rows=train_ds.to_list(),
+                eval_rows=eval_ds.to_list(),
+                config=asdict(chosen),
+                run_id=job_id,
+            )
         self._log("[2/3] Done: training completed on Modal.")
 
         self._log("[3/3] Downloading trained adapter...")
