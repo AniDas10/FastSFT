@@ -38,9 +38,9 @@ def test_run_timestamp_format_is_sortable_and_filesystem_safe():
     # %Y%m%d_%H%M%S: no separators that break paths, and lexical sort ==
     # chronological sort (latest_run_path relies on this).
     assert RUN_TIMESTAMP_FORMAT == "%Y%m%d_%H%M%S"
-    from datetime import datetime
+    from datetime import UTC, datetime
 
-    stamp = datetime(2026, 1, 2, 3, 4, 5).strftime(RUN_TIMESTAMP_FORMAT)
+    stamp = datetime(2026, 1, 2, 3, 4, 5, tzinfo=UTC).strftime(RUN_TIMESTAMP_FORMAT)
     assert stamp == "20260102_030405"
 
 

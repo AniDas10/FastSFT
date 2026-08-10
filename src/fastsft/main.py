@@ -237,7 +237,7 @@ def _input_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
     return parser.parse_args()
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Run the distillation pipeline: " + " -> ".join(STAGE_ORDER) + "."
     )

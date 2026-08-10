@@ -64,7 +64,7 @@ def render(adapter_dir: str, prompt: str, tuned: str, untuned: str | None) -> No
         )
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Spot-check a child adapter on one prompt: print the tuned "
         "answer (and the untuned baseline for comparison)."

@@ -6,6 +6,7 @@ CLI argument validation lives in validation_checks.py.
 import json
 import os
 from datetime import datetime
+from typing import Any, cast
 
 from datasets import Dataset, DatasetDict
 from distilabel.distiset import Distiset
@@ -83,7 +84,7 @@ def _training_metadata_path(run_dir: str) -> str:
     return os.path.normpath(run_dir) + "." + TRAINING_METADATA_FILENAME
 
 
-def save_training_metadata(run_dir: str, **fields) -> str:
+def save_training_metadata(run_dir: str, **fields: Any) -> str:
     """Write training metadata (parent model/instruction) as JSON sidecar; return path."""
     path = _training_metadata_path(run_dir)
     with open(path, "w") as f:
@@ -100,4 +101,4 @@ def load_training_metadata(adapter_dir: str) -> dict | None:
     if not os.path.exists(path):
         return None
     with open(path) as f:
-        return json.load(f)
+        return cast(dict, json.load(f))

@@ -124,7 +124,7 @@ def render(results: dict, adapter_dir: str) -> None:
         console.print(samples_panel)
 
 
-def main():
+def main() -> None:
     parser = argparse.ArgumentParser(
         description="Show a finished evaluation run's win rates, similarity, and takeaways."
     )

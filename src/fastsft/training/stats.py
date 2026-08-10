@@ -15,6 +15,7 @@ import glob
 import json
 import math
 import os
+from typing import cast
 
 from fastsft.findings import Finding
 
@@ -35,7 +36,7 @@ def load_stats(adapter_dir: str) -> dict:
     direct = os.path.join(adapter_dir, "training_stats.json")
     if os.path.exists(direct):
         with open(direct) as f:
-            return json.load(f)
+            return cast(dict, json.load(f))
 
     checkpoints = glob.glob(os.path.join(adapter_dir, "checkpoint-*"))
     checkpoints.sort(key=lambda p: _checkpoint_number(p))
@@ -43,7 +44,7 @@ def load_stats(adapter_dir: str) -> dict:
         state_path = os.path.join(ckpt, "trainer_state.json")
         if os.path.exists(state_path):
             with open(state_path) as f:
-                return json.load(f)
+                return cast(dict, json.load(f))
 
     raise FileNotFoundError(
         f"No training telemetry in '{adapter_dir}' (looked for training_stats.json "
@@ -86,6 +87,7 @@ class RunInterpreter:
         self.best_step = min(self.eval, key=lambda p: p[1])[0] if self.eval else None
         self.early_stopped = (
             self.epoch is not None
+            and self.max_epochs is not None
             and bool(self.max_epochs)
             and self.epoch < self.max_epochs - _EPS
         )
@@ -122,6 +124,9 @@ class RunInterpreter:
         """Validation loss dropped meaningfully from where it started (it learned)."""
         if len(self.eval) < MIN_EVALS_FOR_TREND:
             return None
+        # len(self.eval) >= MIN_EVALS_FOR_TREND (>= 1) guarantees these were
+        # derived from a non-empty `losses` in __init__.
+        assert self.first is not None and self.best is not None
         drop = (self.first - self.best) / self.first if self.first else 0
         if drop <= IMPROVEMENT_MARGIN:
             return None
@@ -134,7 +139,10 @@ class RunInterpreter:
     def _check_overfitting(self) -> Finding | None:
         """Validation loss bottomed out and then climbed back up while training
         continued -- the classic overfitting signature."""
-        if len(self.eval) < MIN_EVALS_FOR_TURN or self.best <= _EPS:
+        if len(self.eval) < MIN_EVALS_FOR_TURN:
+            return None
+        assert self.best is not None and self.last is not None and self.best_step is not None
+        if self.best <= _EPS:
             return None
         turned_up = self.best_step != self.eval[-1][0]
         rose = (self.last - self.best) / self.best > OVERFIT_MARGIN
@@ -152,6 +160,7 @@ class RunInterpreter:
         or it was still improving when it ran out of epochs."""
         if len(self.eval) < MIN_EVALS_FOR_TREND:
             return None
+        assert self.first is not None and self.best is not None and self.last is not None
         drop = (self.first - self.best) / self.first if self.first else 0
         if drop <= IMPROVEMENT_MARGIN:
             return Finding(
@@ -176,6 +185,9 @@ class RunInterpreter:
         """Training ended before the epoch ceiling -- early stopping engaged."""
         if not self.early_stopped:
             return None
+        # early_stopped is only ever True when epoch/max_epochs are both set
+        # (see __init__), so this narrows them for mypy too.
+        assert self.epoch is not None and self.max_epochs is not None
         return Finding(
             "good",
             f"Stopped early at {self.epoch:.2f}/{int(self.max_epochs)} epochs -- early "

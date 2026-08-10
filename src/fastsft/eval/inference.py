@@ -14,8 +14,19 @@ The `python -m` spot-check CLI (rich-rendered) lives in eval/inference_viewer.py
 this module only powers it.
 """
 
+# Defers annotation evaluation so the PeftModel/PreTrainedTokenizerBase hints
+# below can stay unquoted despite only being imported under TYPE_CHECKING
+# (peft/torch aren't hard dependencies -- see module docstring).
+from __future__ import annotations
+
+from typing import TYPE_CHECKING, cast
+
 from fastsft.device import detect_device, dtype_for_device
 from fastsft.eval.constants import DEFAULT_INFERENCE_BATCH_SIZE, DEFAULT_MAX_NEW_TOKENS
+
+if TYPE_CHECKING:
+    from peft import PeftModel
+    from transformers import BatchEncoding, PreTrainedTokenizerBase
 
 
 class ChildInferenceEngine:
@@ -32,8 +43,8 @@ class ChildInferenceEngine:
         self._max_new_tokens = max_new_tokens
         self._batch_size = batch_size
         self._device = detect_device()
-        self._model = None
-        self._tokenizer = None
+        self._model: PeftModel | None = None
+        self._tokenizer: PreTrainedTokenizerBase | None = None
 
     def _load(self) -> None:
         """Loads base weights + adapter + tokenizer on first use (idempotent)."""
@@ -68,6 +79,7 @@ class ChildInferenceEngine:
     def generate_untuned(self, prompts: list[str]) -> list[str]:
         """One answer per prompt from the untuned child (base weights only)."""
         self._load()
+        assert self._model is not None  # set by _load()
         with self._model.disable_adapter():
             return self._generate(prompts)
 
@@ -80,20 +92,26 @@ class ChildInferenceEngine:
     def _generate_batch(self, prompts: list[str]) -> list[str]:
         import torch
 
-        tokenizer = self._tokenizer
+        assert self._model is not None and self._tokenizer is not None  # set by _load()
+        model, tokenizer = self._model, self._tokenizer
         # No system prompt: training examples carried none, so the child answers
         # from the bare user turn. add_generation_prompt cues the assistant turn.
         conversations = [[{"role": "user", "content": prompt}] for prompt in prompts]
-        inputs = tokenizer.apply_chat_template(
-            conversations,
-            add_generation_prompt=True,
-            return_tensors="pt",
-            padding=True,
-            return_dict=True,
-        ).to(self._model.device)
+        # return_dict=True always returns a BatchEncoding; apply_chat_template's
+        # overloads don't narrow to that from these kwargs alone.
+        inputs = cast(
+            "BatchEncoding",
+            tokenizer.apply_chat_template(
+                conversations,
+                add_generation_prompt=True,
+                return_tensors="pt",
+                padding=True,
+                return_dict=True,
+            ),
+        ).to(model.device)
 
         with torch.no_grad():
-            outputs = self._model.generate(
+            outputs = model.generate(
                 **inputs,
                 max_new_tokens=self._max_new_tokens,
                 do_sample=False,

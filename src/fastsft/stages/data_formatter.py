@@ -1,7 +1,7 @@
 """DataFormatter mini-pipeline: renders a dataset into a target model's chat format."""
 
 from distilabel.distiset import Distiset
-from transformers import AutoTokenizer
+from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from fastsft.constants import FORMATTED_OUTPUT_SUBDIR
 from fastsft.helper import convert_to_distiset, save_distiset
@@ -20,9 +20,9 @@ class DataFormatter(Stage):
     def __init__(self, child_model_id: str, verbose: bool = True):
         super().__init__(verbose=verbose)
         self._child_model_id = child_model_id
-        self._tokenizer = None
+        self._tokenizer: PreTrainedTokenizerBase | None = None
 
-    def _load_tokenizer(self):
+    def _load_tokenizer(self) -> PreTrainedTokenizerBase:
         """Loads, validates, and caches the child model's tokenizer on first use."""
         if self._tokenizer is None:
             tokenizer = AutoTokenizer.from_pretrained(self._child_model_id)
@@ -67,7 +67,7 @@ class DataFormatter(Stage):
         tokenizer = self._load_tokenizer()
         train = distiset["default"]["train"]
 
-        def render(row):
+        def render(row: dict) -> dict:
             return {
                 "text": tokenizer.apply_chat_template(row["messages"], tokenize=False)
             }

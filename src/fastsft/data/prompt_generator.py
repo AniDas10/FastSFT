@@ -19,7 +19,11 @@ from fastsft.model.base import Model
 def seed_count(num_samples: int, breadth_exponent: float = BREADTH_EXPONENT) -> int:
     """Breadth: number of distinct seed topics for `num_samples`
     (ceil(N ** breadth_exponent), clamped to [1, num_samples])."""
-    return max(1, min(num_samples, math.ceil(num_samples ** breadth_exponent)))
+    # math.pow (not `**`) so the result types as float, not Any -- `**` on two
+    # numbers is typed Any in typeshed (a negative base + fractional exponent
+    # can return complex), which isn't a real concern for this always-positive
+    # breadth calculation.
+    return max(1, min(num_samples, math.ceil(math.pow(num_samples, breadth_exponent))))
 
 
 class GeneratedPrompts(BaseModel):
