@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: astral-sh/setup-uv@v7
       # --only-group dev installs just ruff (pinned in pyproject.toml), not the
       # project's ML dependencies -- keeps the lint job fast and self-contained.
       - run: uv run --only-group dev ruff check .
