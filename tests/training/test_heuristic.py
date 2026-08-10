@@ -87,7 +87,7 @@ def test_recommend_configs_small_model_ranks_cheapest_first_all_lora(patched_met
     assert len(result) == 3
     prices = [c.est_usd_per_hour for c in result]
     assert prices == sorted(prices)                      # cheapest first
-    assert result[0].gpu_tier == "T4"                    # the cheapest tier
+    assert result[0].gpu_tier == "L4"                    # the cheapest tier
     assert all(c.strategy == LORA for c in result)       # lora fits -> preferred
 
 
@@ -107,15 +107,15 @@ def test_recommend_configs_feasible_and_grad_accum_consistent(patched_metadata):
 
 
 def test_recommend_configs_falls_back_to_qlora_when_lora_does_not_fit(patched_metadata):
-    # 7B model: on T4 (16GB) lora doesn't fit even at batch 1, but qlora does.
-    patched_metadata(int(7e9), 4096, 32, 512)
+    # 13B model: on L4 (24GB, cheapest tier) lora doesn't fit even at batch 1, but qlora does.
+    patched_metadata(int(13e9), 4096, 32, 512)
     # Precondition documenting the scenario (guards against constant drift):
-    assert _best_batch_size(16, int(7e9), LORA, 4096, 32, 512) is None
-    assert _best_batch_size(16, int(7e9), QLORA, 4096, 32, 512) is not None
+    assert _best_batch_size(24, int(13e9), LORA, 4096, 32, 512) is None
+    assert _best_batch_size(24, int(13e9), QLORA, 4096, 32, 512) is not None
 
     result = recommend_configs("mid/model", [], top_n=3)
-    t4 = next(c for c in result if c.gpu_tier == "T4")
-    assert t4.strategy == QLORA                           # fell back
+    l4 = next(c for c in result if c.gpu_tier == "L4")
+    assert l4.strategy == QLORA                           # fell back
     assert any(c.strategy == LORA for c in result)        # bigger tiers still lora
 
 

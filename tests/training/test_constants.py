@@ -36,8 +36,8 @@ def test_strategy_names():
 
 
 def test_modal_gpu_tier_catalog():
+    # No T4: lacks FlashAttention + native bf16, trains much slower despite the lower $/hr.
     assert MODAL_GPU_TIERS == {
-        "T4": (16, 0.59),
         "L4": (24, 0.80),
         "A10G": (24, 1.10),
         "A100-40GB": (40, 2.10),
