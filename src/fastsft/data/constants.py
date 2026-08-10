@@ -9,8 +9,10 @@ DEFAULT_NUM_SAMPLES = 100
 DEFAULT_PARENT_TEMPERATURE = 0.9
 
 # Breadth (distinct seed topics) = ceil(N ** BREADTH_EXPONENT); >0.5 favors
-# breadth over depth (breadth:depth = N^exp : N^(1-exp)).
-BREADTH_EXPONENT = 2 / 3
+# breadth over depth (breadth:depth = N^exp : N^(1-exp)). Set high (0.85) to
+# actively favor topic diversity over per-topic complexity depth -- e.g. for
+# N=200: ~83 topics x ~2-3 complexity-varied instructions each.
+BREADTH_EXPONENT = 0.85
 
 # Extra guide-output budget per seed, so many-seed requests don't truncate.
 GUIDE_TOKENS_PER_SEED = 64
