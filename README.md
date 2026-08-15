@@ -167,7 +167,7 @@ uv run fastsft "<your description>" [options]
 **GPU options:**
 - `--gpu-tier A100-40GB` — Force a specific Modal GPU (skips cost heuristic).
 - `--modal-timeout 3600` — Seconds to wait for Modal training (default: 7200).
-- `--output-dir /path` — Base directory for `datasets/` and `modelsets/` (default: CWD).
+- `--output-dir /path` — Base directory for `datasets/`, `modelsets/`, and `evalsets/` (default: CWD).
 
 ### Data Viewers
 
@@ -202,13 +202,16 @@ uv run python -m fastsft.training.stats_viewer modelsets/20260809_120000 --json
 # Setup (one-time)
 uv sync --extra evaluation
 
-# Evaluate latest adapter
+# Evaluate latest adapter -- writes evalsets/<timestamp>/{eval_prompts,eval_answers.json,eval_results.json}
 uv run fastsft-eval                                  # or: python -m fastsft.eval.run
 uv run fastsft-eval modelsets/20260809_120000 --num-eval-prompts 10
 
-# View results
+# View results (defaults to the latest run under evalsets/)
 uv run python -m fastsft.eval.results_viewer
-uv run python -m fastsft.eval.results_viewer modelsets/20260809_120000 --json
+uv run python -m fastsft.eval.results_viewer evalsets/20260809_120500 --json
+
+# Rerun with a different judge without regenerating answers
+uv run fastsft-eval --reuse-answers-from 20260809_120500 --judge-model openai/gpt-4o-mini
 
 # Spot-check: compare tuned vs untuned on a single prompt
 uv run python -m fastsft.eval.inference_viewer "your prompt here"
@@ -225,7 +228,7 @@ FastSFT ships with three detailed walkthroughs:
 - **[training_tutorial.md](training_tutorial.md)** — Navigate LoRA/QLoRA, local vs. cloud training, and hyperparameter tuning.
 - **[evaluation_tutorial.md](evaluation_tutorial.md)** — Interpret win rates, spot-check inference, and debug training quality.
 
-Start with [TUTORIAL.md](TUTORIAL.md) for a 15-minute end-to-end walkthrough aimed at hackathons.
+Start with [TUTORIAL.md](TUTORIAL.md) for a 15-minute end-to-end walkthrough.
 
 ---
 
@@ -238,7 +241,7 @@ src/fastsft/
 ├── main.py                 # CLI entry point
 ├── pipeline.py             # DistillationPipeline orchestrator
 ├── constants.py            # Model defaults, environment constants
-├── helper.py               # Distiset I/O, timestamps, metadata
+├── helper.py               # Distiset I/O, timestamps, metadata, datasets/modelsets/evalsets dirs
 ├── device.py               # GPU/CPU/MPS detection for training + eval
 ├── warnings_filter.py      # Suppress import-time noise
 ├── stages/                 # DataGenerator, DataFormatter, FineTuner
@@ -270,13 +273,13 @@ src/fastsft/
 │   ├── stats.py           # Load and interpret training telemetry
 │   └── stats_viewer.py    # CLI: visualize loss curves + diagnostics
 └── eval/                  # Post-training evaluation (optional extra)
-    ├── run.py             # fastsft-eval CLI
-    ├── evaluator.py       # Collect answers + judge pairs
+    ├── run.py             # fastsft-eval CLI: writes evalsets/<run_id>/
+    ├── evaluator.py       # Collect answers (or reuse) + judge pairs
     ├── inference.py       # ChildInferenceEngine (core child generation)
     ├── inference_viewer.py # CLI: spot-check inference
     ├── embeddings.py      # Sentence-transformers similarity
     ├── prompt_set.py      # Generate/persist/load eval prompts
-    ├── results.py         # Persist/interpret evaluation metrics
+    ├── results.py         # Persist/load eval_answers.json + eval_results.json
     ├── results_viewer.py  # CLI: visualize results
     ├── config.py          # EvalConfig
     └── constants.py       # Eval defaults
@@ -306,6 +309,10 @@ DataGenerator persists `training_metadata.json` as a sibling file next to the ru
 ### Early Stopping
 
 FineTuner holds out a validation slice (default 10%) for early stopping. Training stops if validation loss doesn't improve for N consecutive evals (default 3). This prevents overfitting without fixing epochs upfront.
+
+### Evalsets
+
+Each `fastsft-eval` invocation gets its own `evalsets/<timestamp>/` folder holding `eval_prompts` (the held-out prompt set), `eval_answers.json` (raw parent/tuned/untuned generations), and `eval_results.json` (judged win rates + similarity) together — separate from the adapter's own `modelsets/<timestamp>/`, since one adapter can be evaluated many times. By default, prompts are reused from the latest evalsets run (for apples-to-apples comparison) but answers are always regenerated; pass `--reuse-answers-from <run_id>` to skip regeneration and rejudge prior answers (e.g. with a different `--judge-model`) instead.
 
 ### Cost Heuristic
 
@@ -340,7 +347,7 @@ uv run python -m fastsft.training.stats_viewer modelsets/<timestamp>
 # 6. Evaluate against the parent
 uv sync --extra evaluation
 uv run fastsft-eval modelsets/<timestamp>
-uv run python -m fastsft.eval.results_viewer modelsets/<timestamp>
+uv run python -m fastsft.eval.results_viewer
 
 # 7. Try it out
 python3 << 'EOF'
@@ -440,7 +447,7 @@ modal token new    # Authenticate once
 
 ## 📚 Additional Resources
 
-- **[TUTORIAL.md](TUTORIAL.md)** — 15-minute end-to-end walkthrough (hackathon-friendly).
+- **[TUTORIAL.md](TUTORIAL.md)** — 15-minute end-to-end walkthrough.
 - **[data_generation_tutorial.md](data_generation_tutorial.md)** — Deep dive into data generation.
 - **[training_tutorial.md](training_tutorial.md)** — Master training, hyperparameters, and GPU selection.
 - **[evaluation_tutorial.md](evaluation_tutorial.md)** — Interpret results and debug quality issues.
