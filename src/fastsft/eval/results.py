@@ -1,7 +1,7 @@
-"""Core evaluation-results logic: persist a finished run's results next to its
-adapter, load them back, and turn them into plain-English takeaways. Pure stdlib
--- no `rich`, no heavy deps -- so the data/logic stays reusable and testable
-(the `--json` output or any direct library consumer).
+"""Core evaluation-results logic: persist a finished run's results under its own
+evalsets/<run_id> folder, load them back, and turn them into plain-English
+takeaways. Pure stdlib -- no `rich`, no heavy deps -- so the data/logic stays
+reusable and testable (the `--json` output or any direct library consumer).
 
 Terminal rendering AND the `python -m` CLI live in eval/results_viewer.py
 (`uv run python -m fastsft.eval.results_viewer`); this module only powers them.
@@ -12,7 +12,7 @@ import math
 import os
 from typing import cast
 
-from fastsft.eval.constants import EVAL_RESULTS_FILENAME
+from fastsft.eval.constants import EVAL_ANSWERS_FILENAME, EVAL_RESULTS_FILENAME
 from fastsft.findings import Finding
 
 # Standard errors from 50% a win rate must clear to count as a real edge, not
@@ -31,21 +31,53 @@ def _win_margin(num_prompts: int) -> float:
     return WIN_MARGIN_SIGMAS * math.sqrt(0.25 / num_prompts)
 
 
-def save_results(results: dict, adapter_dir: str) -> str:
-    """Writes `results` to adapter_dir/eval_results.json; returns the path."""
-    path = os.path.join(adapter_dir, EVAL_RESULTS_FILENAME)
+def save_results(results: dict, run_dir: str) -> str:
+    """Writes `results` to run_dir/eval_results.json (run_dir is an
+    evalsets_dir()/<run_id> folder); returns the path."""
+    os.makedirs(run_dir, exist_ok=True)
+    path = os.path.join(run_dir, EVAL_RESULTS_FILENAME)
     with open(path, "w") as f:
         json.dump(results, f, indent=2)
     return path
 
 
-def load_results(adapter_dir: str) -> dict:
-    """Loads a finished run's eval_results.json from `adapter_dir`."""
-    path = os.path.join(adapter_dir, EVAL_RESULTS_FILENAME)
+def save_answers(
+    prompts: list[str], parent: list[str], tuned: list[str], untuned: list[str], run_dir: str
+) -> str:
+    """Writes per-prompt parent/tuned/untuned answers to run_dir/eval_answers.json;
+    returns the path. Called right after generation, before judging, so a later
+    judging failure doesn't lose the (expensive) generated answers."""
+    os.makedirs(run_dir, exist_ok=True)
+    answers = [
+        {"prompt": p, "parent": pa, "tuned": t, "untuned": u}
+        for p, pa, t, u in zip(prompts, parent, tuned, untuned, strict=True)
+    ]
+    path = os.path.join(run_dir, EVAL_ANSWERS_FILENAME)
+    with open(path, "w") as f:
+        json.dump(answers, f, indent=2)
+    return path
+
+
+def load_answers(run_dir: str) -> list[dict] | None:
+    """Loads run_dir/eval_answers.json (prompt/parent/tuned/untuned records), or
+    None if that run never got that far (e.g. judging failed before it, or it
+    predates the answers file). Lets a rerun reuse prior generations instead of
+    redoing the expensive parent-API and local-inference calls."""
+    path = os.path.join(run_dir, EVAL_ANSWERS_FILENAME)
+    if not os.path.exists(path):
+        return None
+    with open(path) as f:
+        return cast(list[dict], json.load(f))
+
+
+def load_results(run_dir: str) -> dict:
+    """Loads a finished eval run's eval_results.json from `run_dir`
+    (an evalsets_dir()/<run_id> folder)."""
+    path = os.path.join(run_dir, EVAL_RESULTS_FILENAME)
     if not os.path.exists(path):
         raise FileNotFoundError(
-            f"No {EVAL_RESULTS_FILENAME} in '{adapter_dir}'. Run "
-            "`python -m fastsft.eval.run [adapter_dir]` first."
+            f"No {EVAL_RESULTS_FILENAME} in '{run_dir}'. Run "
+            "`python -m fastsft.eval.run` first."
         )
     with open(path) as f:
         return cast(dict, json.load(f))

@@ -17,10 +17,11 @@ from fastsft.data.prompt_generator import PromptGenerator, seed_count
 from fastsft.helper import (
     convert_to_distiset,
     datasets_dir,
+    evalsets_dir,
     latest_run_path,
     load_data,
     matched_raw_run,
-    save_distiset,
+    save_eval_prompts,
 )
 from fastsft.model.base import Model
 
@@ -104,15 +105,16 @@ class EvalPromptSet:
         return unique
 
     def save(self, run_id: str) -> str:
-        """Persists the set under datasets/eval_prompts/<run_id>; returns the path."""
+        """Persists the set under evalsets/<run_id>/eval_prompts; returns the path."""
         dataset = Dataset.from_dict({PROMPT_COLUMN: self.prompts})
-        return save_distiset(convert_to_distiset(dataset), EVAL_PROMPTS_SUBDIR, run_id)
+        return save_eval_prompts(convert_to_distiset(dataset), run_id)
 
     @classmethod
     def load(cls, path: str | None = None) -> "EvalPromptSet":
-        """Loads a saved set (default: the latest under datasets/eval_prompts/)."""
+        """Loads a saved set (default: eval_prompts/ under the latest evalsets/ run)."""
         if path is None:
-            path = latest_run_path(os.path.join(datasets_dir(), EVAL_PROMPTS_SUBDIR))
+            run_dir = latest_run_path(evalsets_dir())
+            path = os.path.join(run_dir, EVAL_PROMPTS_SUBDIR)
         distiset = load_data(path)
         assert distiset is not None, f"No eval prompt set found at '{path}'."
         return cls(list(distiset["default"]["train"][PROMPT_COLUMN]))

@@ -75,6 +75,5 @@ def train_lora(
         tar.add(output_dir, arcname=".")
     adapter_volume.commit()
 
-    # Volume.read_file() paths are relative to the volume root, not the
-    # container mount point, so strip the ADAPTER_VOLUME_PATH prefix.
+    # Volume.read_file() paths are relative to the volume root, not the container mount point.
     return f"/{run_id}.tar.gz"

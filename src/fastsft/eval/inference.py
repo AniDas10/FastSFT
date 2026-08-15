@@ -21,8 +21,11 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
 
+from rich.progress import track
+
 from fastsft.device import detect_device, dtype_for_device
 from fastsft.eval.constants import DEFAULT_INFERENCE_BATCH_SIZE, DEFAULT_MAX_NEW_TOKENS
+from fastsft.progress import console
 
 if TYPE_CHECKING:
     from peft import PeftModel
@@ -74,18 +77,19 @@ class ChildInferenceEngine:
     def generate_tuned(self, prompts: list[str]) -> list[str]:
         """One answer per prompt from the fine-tuned child (adapter applied)."""
         self._load()
-        return self._generate(prompts)
+        return self._generate(prompts, "tuned")
 
     def generate_untuned(self, prompts: list[str]) -> list[str]:
         """One answer per prompt from the untuned child (base weights only)."""
         self._load()
         assert self._model is not None  # set by _load()
         with self._model.disable_adapter():
-            return self._generate(prompts)
+            return self._generate(prompts, "untuned")
 
-    def _generate(self, prompts: list[str]) -> list[str]:
+    def _generate(self, prompts: list[str], label: str) -> list[str]:
         answers: list[str] = []
-        for start in range(0, len(prompts), self._batch_size):
+        starts = range(0, len(prompts), self._batch_size)
+        for start in track(starts, description=f"Generating ({label})...", console=console):
             answers.extend(self._generate_batch(prompts[start : start + self._batch_size]))
         return answers
 

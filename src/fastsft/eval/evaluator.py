@@ -12,10 +12,14 @@ the judge's position bias. Produces a plain dict; persistence/interpretation
 live in eval/results.py, and prompt-set lifecycle in eval/run.py.
 """
 
+import os
+
 from fastsft.eval.config import EvalConfig
 from fastsft.eval.constants import COMPARISON_JUDGE_INSTRUCTION, STYLE_JUDGE_INSTRUCTION
 from fastsft.eval.embeddings import pairwise_similarities
 from fastsft.eval.inference import ChildInferenceEngine
+from fastsft.eval.results import save_answers
+from fastsft.helper import evalsets_dir
 from fastsft.model.base import Model
 from fastsft.model.judge import Judge, Verdict
 from fastsft.progress import ProgressLogger, rule
@@ -39,14 +43,19 @@ class Evaluator(ProgressLogger):
         super().__init__(verbose=verbose)
         self._config = config
 
-    def run(self, prompts: list[str]) -> dict:
+    def run(self, prompts: list[str], reused_answers: list[dict] | None = None) -> dict:
         """Validate the input, then run -- mirrors the Stage validate-then-run
         template, and brackets the run with a start/end partition rule so eval
-        reads like the pipeline stages regardless of caller (CLI or direct)."""
+        reads like the pipeline stages regardless of caller (CLI or direct).
+
+        `reused_answers` (from eval.results.load_answers), if given, must cover
+        every prompt in `prompts` -- generation is skipped entirely in favor of
+        those prior parent/tuned/untuned answers.
+        """
         self._validate_input(prompts)
         if self._verbose:
             rule("Evaluation")
-        results = self._run(prompts)
+        results = self._run(prompts, reused_answers)
         if self._verbose:
             rule("Evaluation complete", style="dim")
         return results
@@ -55,17 +64,26 @@ class Evaluator(ProgressLogger):
         if not prompts:
             raise ValueError("Evaluator.run() requires a non-empty prompt set.")
 
-    def _run(self, prompts: list[str]) -> dict:
+    def _run(self, prompts: list[str], reused_answers: list[dict] | None) -> dict:
         """Evaluates `prompts` and returns the results dict (see module docstring)."""
-        self._log(f"[1/5] Generating answers for {len(prompts)} eval prompts...")
-        parent = self._parent_answers(prompts)
-        engine = ChildInferenceEngine(
-            self._config.adapter_dir,
-            max_new_tokens=self._config.max_new_tokens,
-            batch_size=self._config.inference_batch_size,
-        )
-        tuned = engine.generate_tuned(prompts)
-        untuned = engine.generate_untuned(prompts)
+        run_dir = os.path.join(evalsets_dir(), self._config.run_id)
+        if reused_answers is not None:
+            self._log(f"[1/5] Reusing {len(prompts)} previously generated answers...")
+            by_prompt = {a["prompt"]: a for a in reused_answers}
+            parent = [by_prompt[p]["parent"] for p in prompts]
+            tuned = [by_prompt[p]["tuned"] for p in prompts]
+            untuned = [by_prompt[p]["untuned"] for p in prompts]
+        else:
+            self._log(f"[1/5] Generating answers for {len(prompts)} eval prompts...")
+            parent = self._parent_answers(prompts)
+            engine = ChildInferenceEngine(
+                self._config.adapter_dir,
+                max_new_tokens=self._config.max_new_tokens,
+                batch_size=self._config.inference_batch_size,
+            )
+            tuned = engine.generate_tuned(prompts)
+            untuned = engine.generate_untuned(prompts)
+        save_answers(prompts, parent, tuned, untuned, run_dir)
         self._log("[1/5] Done: parent, tuned, and untuned answers ready.")
 
         judge = Judge(model_id=self._config.judge_model)
@@ -89,6 +107,7 @@ class Evaluator(ProgressLogger):
         self._log("[5/5] Done.")
 
         return {
+            "run_id": self._config.run_id,
             "adapter_dir": self._config.adapter_dir,
             "parent_model": self._config.parent_model,
             "judge_model": self._config.judge_model,
