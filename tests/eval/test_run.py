@@ -7,6 +7,8 @@ resolved EvalConfig into the Evaluator and persisting its results.
 """
 
 import argparse
+import json
+import os
 import sys
 
 import pytest
@@ -14,6 +16,7 @@ import pytest
 import fastsft.eval.run as run_mod
 from fastsft.constants import DEFAULT_PARENT_MODEL
 from fastsft.data.constants import DEFAULT_PARENT_TEMPERATURE
+from fastsft.helper import evalsets_dir
 from fastsft.model.constants import DEFAULT_MAX_TOKENS
 
 
@@ -125,20 +128,22 @@ def _prompt_set_args(eval_prompts_path=None, regenerate_prompts=False):
 
 def test_resolve_prompt_set_explicit_path(fake_prompt_set, make_eval_config):
     run_mod._resolve_prompt_set(
-        _prompt_set_args(eval_prompts_path="datasets/eval/mine"), make_eval_config()
+        _prompt_set_args(eval_prompts_path="datasets/eval/mine"),
+        make_eval_config(run_id="TS"),
     )
-    assert fake_prompt_set.calls == [("load", "datasets/eval/mine")]
+    # Always saved into this run's own folder too, even when loaded from elsewhere.
+    assert fake_prompt_set.calls == [("load", "datasets/eval/mine"), ("save", "TS")]
 
 
 def test_resolve_prompt_set_reuses_latest_by_default(fake_prompt_set, make_eval_config):
-    run_mod._resolve_prompt_set(_prompt_set_args(), make_eval_config())
-    assert fake_prompt_set.calls == [("load", None)]
+    run_mod._resolve_prompt_set(_prompt_set_args(), make_eval_config(run_id="TS"))
+    assert fake_prompt_set.calls == [("load", None), ("save", "TS")]
 
 
 def test_resolve_prompt_set_regenerate_forces_fresh(fake_prompt_set, make_eval_config):
     run_mod._resolve_prompt_set(
         _prompt_set_args(regenerate_prompts=True),
-        make_eval_config(adapter_dir="modelsets/run", num_eval_prompts=5),
+        make_eval_config(adapter_dir="modelsets/run", num_eval_prompts=5, run_id="TS"),
     )
     kinds = [c[0] for c in fake_prompt_set.calls]
     assert "load" not in kinds
@@ -160,6 +165,71 @@ def test_resolve_prompt_set_generates_when_none_saved(
     assert kinds == ["load", "generate", "save"]
 
 
+# --- _resolve_reused_answers: opt-in only, no implicit "latest" guessing ----
+
+
+def _write_answers(run_dir, records):
+    os.makedirs(run_dir, exist_ok=True)
+    with open(os.path.join(run_dir, "eval_answers.json"), "w") as f:
+        json.dump(records, f)
+
+
+def test_resolve_reused_answers_none_when_flag_absent():
+    # No --reuse-answers-from -- returns immediately, no filesystem access.
+    assert run_mod._resolve_reused_answers(None, _FakePromptSet(["p0"])) is None
+
+
+def test_resolve_reused_answers_bare_run_id_resolves_under_evalsets(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    records = [{"prompt": "p0", "parent": "par0", "tuned": "t0", "untuned": "u0"}]
+    _write_answers(os.path.join("evalsets", "run-123"), records)
+
+    result = run_mod._resolve_reused_answers("run-123", _FakePromptSet(["p0"]))
+
+    assert result == records
+
+
+def test_resolve_reused_answers_full_path_used_directly(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    records = [{"prompt": "p0", "parent": "par0", "tuned": "t0", "untuned": "u0"}]
+    run_dir = tmp_path / "elsewhere" / "run-abc"
+    _write_answers(str(run_dir), records)
+
+    result = run_mod._resolve_reused_answers(str(run_dir), _FakePromptSet(["p0"]))
+
+    assert result == records
+
+
+def test_resolve_reused_answers_missing_file_raises(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    os.makedirs(os.path.join("evalsets", "empty-run"))
+
+    with pytest.raises(FileNotFoundError, match="eval_answers.json"):
+        run_mod._resolve_reused_answers("empty-run", _FakePromptSet(["p0"]))
+
+
+def test_resolve_reused_answers_missing_prompts_raises(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    records = [{"prompt": "p0", "parent": "par0", "tuned": "t0", "untuned": "u0"}]
+    _write_answers(os.path.join("evalsets", "partial-run"), records)
+
+    with pytest.raises(ValueError, match=r"missing answers for 1/2"):
+        run_mod._resolve_reused_answers("partial-run", _FakePromptSet(["p0", "p1"]))
+
+
+def test_resolve_reused_answers_full_coverage_returns_answers(tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)
+    records = [
+        {"prompt": "p0", "parent": "par0", "tuned": "t0", "untuned": "u0"},
+        {"prompt": "p1", "parent": "par1", "tuned": "t1", "untuned": "u1"},
+    ]
+    _write_answers(os.path.join("evalsets", "full-run"), records)
+
+    result = run_mod._resolve_reused_answers("full-run", _FakePromptSet(["p0", "p1"]))
+
+    assert result == records
+
+
 # --- main(): resolved config -> Evaluator -> save_results -------------------
 
 class _RecordingEvaluator:
@@ -167,8 +237,9 @@ class _RecordingEvaluator:
         self.config = config
         _RecordingEvaluator.last = self
 
-    def run(self, prompts):
+    def run(self, prompts, reused_answers=None):
         self.run_prompts = prompts
+        self.reused_answers = reused_answers
         return {"comparisons": {"tuned_vs_untuned": {"win_rate": 0.75}}}
 
 
@@ -189,8 +260,8 @@ def run_eval_main(monkeypatch):
         monkeypatch.setattr(run_mod, "Evaluator", _RecordingEvaluator)
         monkeypatch.setattr(
             run_mod, "save_results",
-            lambda results, adapter_dir: save_calls.append((results, adapter_dir))
-            or "modelsets/latest/eval_results.json",
+            lambda results, run_dir: save_calls.append((results, run_dir))
+            or "evalsets/latest/eval_results.json",
         )
         monkeypatch.setattr(sys, "argv", ["fastsft-eval", *argv])
         run_mod.main()
@@ -204,16 +275,16 @@ def test_main_defaults_adapter_to_latest_run(run_eval_main):
     assert evaluator.config.adapter_dir == "modelsets/latest"
     # Evaluator got the resolved prompt set's prompts...
     assert evaluator.run_prompts == ["a", "b", "c"]
-    # ...and results were persisted against the same adapter dir.
-    (results, adapter_dir), = save_calls
-    assert adapter_dir == "modelsets/latest"
+    # ...and results were persisted under this eval run's own evalsets/<run_id> dir.
+    (results, run_dir), = save_calls
+    assert run_dir == os.path.join(evalsets_dir(), evaluator.config.run_id)
     assert results["comparisons"]["tuned_vs_untuned"]["win_rate"] == 0.75
 
 
 def test_main_uses_positional_adapter_dir(run_eval_main):
     evaluator, save_calls = run_eval_main(["modelsets/run-7"])
     assert evaluator.config.adapter_dir == "modelsets/run-7"
-    assert save_calls[0][1] == "modelsets/run-7"
+    assert save_calls[0][1] == os.path.join(evalsets_dir(), evaluator.config.run_id)
 
 
 def test_main_swap_positions_default_true(run_eval_main):

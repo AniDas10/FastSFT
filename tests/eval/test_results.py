@@ -3,9 +3,11 @@ good/warn/info Finding bands, JSON serialization, and save/load round-trip."""
 
 import json
 import math
+import os
 
 import pytest
 
+from fastsft.eval.constants import EVAL_ANSWERS_FILENAME
 from fastsft.eval.results import (
     SIM_MARGIN,
     WIN_MARGIN_SIGMAS,
@@ -16,8 +18,10 @@ from fastsft.eval.results import (
     _tuned_vs_untuned,
     _win_margin,
     interpret,
+    load_answers,
     load_results,
     results_as_json,
+    save_answers,
     save_results,
 )
 
@@ -208,3 +212,45 @@ def test_save_load_roundtrip(tmp_path):
 def test_load_results_missing_raises(tmp_path):
     with pytest.raises(FileNotFoundError):
         load_results(str(tmp_path))
+
+
+def test_save_results_creates_run_dir_if_missing(tmp_path):
+    # save_answers/save_results are the first writes into a fresh
+    # evalsets/<run_id> folder -- must not assume the dir already exists.
+    run_dir = tmp_path / "does" / "not" / "exist" / "yet"
+    path = save_results(_full_results(), str(run_dir))
+    assert os.path.isfile(path)
+
+
+# --- save_answers / load_answers round-trip -------------------------------
+
+
+def _answers():
+    return [
+        {"prompt": "p0", "parent": "par0", "tuned": "t0", "untuned": "u0"},
+        {"prompt": "p1", "parent": "par1", "tuned": "t1", "untuned": "u1"},
+    ]
+
+
+def test_save_load_answers_roundtrip(tmp_path):
+    prompts = ["p0", "p1"]
+    path = save_answers(prompts, ["par0", "par1"], ["t0", "t1"], ["u0", "u1"], str(tmp_path))
+    assert path.endswith(EVAL_ANSWERS_FILENAME)
+    assert load_answers(str(tmp_path)) == _answers()
+
+
+def test_save_answers_creates_run_dir_if_missing(tmp_path):
+    run_dir = tmp_path / "fresh" / "run"
+    path = save_answers(["p0"], ["par0"], ["t0"], ["u0"], str(run_dir))
+    assert os.path.isfile(path)
+
+
+def test_save_answers_mismatched_lengths_raises(tmp_path):
+    # zip(..., strict=True) in save_answers should catch a caller bug (e.g. a
+    # dropped/duplicated answer) rather than silently misaligning prompt/answer.
+    with pytest.raises(ValueError):
+        save_answers(["p0", "p1"], ["par0"], ["t0", "t1"], ["u0", "u1"], str(tmp_path))
+
+
+def test_load_answers_missing_returns_none(tmp_path):
+    assert load_answers(str(tmp_path)) is None
