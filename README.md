@@ -2,10 +2,12 @@
 
 **Distill any open-weight LLM into a small one. Generate training data automatically. Fine-tune locally or on cloud GPUs. Compare against the parent.**
 
-FastSFT is a production-ready pipeline that transforms a one-sentence description into a fully trained small model that mimics a larger teacher's style. It handles synthetic data generation, quality filtering, formatting, training, and evaluation — all with sensible defaults and override control.
+FastSFT is a structured pipeline based tool that transforms a one-sentence description into a fully trained small model that mimics a larger teacher's style. It handles synthetic data generation, quality filtering, formatting, training, and evaluation — all with sensible defaults and override control.
 
 Built on [distilabel](https://github.com/argilla-io/distilabel), [OpenRouter](https://openrouter.ai), Modal, Hugging Face, and PEFT.
 
+This was built essentially as a personal fun project (vibe coded using claude) to learn via building to understand how AI models work under the hood. Feel free to play around with it for fun! (Note: This repo/library won't be maintained or kept up to date).
+ 
 ---
 
 ## ⚡ 60-Second Start
