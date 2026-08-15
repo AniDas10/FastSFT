@@ -79,12 +79,24 @@ def test_win_rate_swap_cancels_a_position_biased_judge(fake_judge, make_eval_con
 # assert the assembled results dict and the orchestration around it.
 
 
-def _wire(monkeypatch, *, prompts, parent, tuned, untuned, sims, compare=None):
+def _wire(
+    monkeypatch, *, prompts, parent, tuned, untuned, sims, compare=None, expect_reuse=False
+):
     """Patch every Evaluator collaborator at its import boundary. Returns the
     list of parent Model instances built during the run (for set_instruction
-    assertions)."""
+    assertions).
+
+    `expect_reuse=True` swaps the generation collaborators (Model,
+    ResponseGenerator, ChildInferenceEngine) for stubs that raise if
+    called -- for asserting the reused_answers path skips generation entirely.
+    """
     created_models = []
-    parent_by_prompt = dict(zip(prompts, parent, strict=True))
+    # Only meaningful when generation actually runs -- expect_reuse callers
+    # pass empty parent/tuned/untuned lists since they're never consumed.
+    parent_by_prompt = {} if expect_reuse else dict(zip(prompts, parent, strict=True))
+
+    def _generation_forbidden(*args, **kwargs):
+        raise AssertionError("generation should be skipped when reusing answers")
 
     def verdicts(pairs):
         from fastsft.model.judge import Verdict
@@ -139,15 +151,26 @@ def _wire(monkeypatch, *, prompts, parent, tuned, untuned, sims, compare=None):
         def compare_to_reference(self, pairs, prompt=None):
             return verdicts(pairs)
 
-    monkeypatch.setattr("fastsft.eval.evaluator.Model", _Model)
     monkeypatch.setattr(
-        "fastsft.data.response_generator.ResponseGenerator", _ResponseGenerator
+        "fastsft.eval.evaluator.Model", _generation_forbidden if expect_reuse else _Model
     )
-    monkeypatch.setattr("fastsft.eval.evaluator.ChildInferenceEngine", _Engine)
+    monkeypatch.setattr(
+        "fastsft.data.response_generator.ResponseGenerator",
+        _generation_forbidden if expect_reuse else _ResponseGenerator,
+    )
+    monkeypatch.setattr(
+        "fastsft.eval.evaluator.ChildInferenceEngine",
+        _generation_forbidden if expect_reuse else _Engine,
+    )
     monkeypatch.setattr("fastsft.eval.evaluator.Judge", _Judge)
     monkeypatch.setattr(
         "fastsft.eval.evaluator.pairwise_similarities",
         lambda a, b, model_id: list(sims),
+    )
+    # Evaluator._run always persists answers -- stub it out so unit tests don't
+    # perform real file I/O against the repo's evalsets/ dir.
+    monkeypatch.setattr(
+        "fastsft.eval.evaluator.save_answers", lambda *args, **kwargs: "unused/eval_answers.json"
     )
     return created_models
 
@@ -288,3 +311,86 @@ def test_run_skips_parent_instruction_when_absent(monkeypatch, make_eval_config)
     Evaluator(make_eval_config(parent_instruction=""), verbose=False).run(prompts)
 
     assert models[0].set_instruction_calls == []
+
+
+# --- reused_answers: skip generation, judge the reused answers directly ----
+
+
+def test_run_reused_answers_skips_generation(monkeypatch, make_eval_config):
+    prompts = ["p0", "p1"]
+    # Model/ResponseGenerator/ChildInferenceEngine all raise if touched --
+    # proves the reused_answers branch never calls into generation at all.
+    _wire(
+        monkeypatch,
+        prompts=prompts,
+        parent=[],
+        tuned=[],
+        untuned=[],
+        sims=[0.5, 0.5],
+        expect_reuse=True,
+        # tuned always in slot "A" (swap off) and always wins.
+        compare=lambda pairs: dict.fromkeys(pairs, "A"),
+    )
+    reused_answers = [
+        {"prompt": "p0", "parent": "par0", "tuned": "t0", "untuned": "u0"},
+        {"prompt": "p1", "parent": "par1", "tuned": "t1", "untuned": "u1"},
+    ]
+    config = make_eval_config(swap_positions=False)
+
+    result = Evaluator(config, verbose=False).run(prompts, reused_answers)
+
+    # Judging ran on the reused values (not on anything generation would produce).
+    assert result["comparisons"]["tuned_vs_untuned"]["win_rate"] == pytest.approx(1.0)
+    assert result["samples"] == [
+        {"prompt": "p0", "parent": "par0", "tuned": "t0", "untuned": "u0"},
+        {"prompt": "p1", "parent": "par1", "tuned": "t1", "untuned": "u1"},
+    ]
+
+
+def test_run_reused_answers_persists_a_copy(monkeypatch, make_eval_config):
+    # Reused answers still get (re-)saved into this run's own evalsets/<run_id>
+    # folder, so every run folder stays self-contained -- see eval/run.py's
+    # "always save a copy" design for prompts, mirrored here for answers.
+    prompts = ["p0"]
+    _wire(
+        monkeypatch, prompts=prompts, parent=[], tuned=[], untuned=[],
+        sims=[0.5], expect_reuse=True,
+    )
+    save_calls = []
+    monkeypatch.setattr(
+        "fastsft.eval.evaluator.save_answers",
+        lambda p, pa, t, u, run_dir: save_calls.append((p, pa, t, u, run_dir)),
+    )
+    reused_answers = [{"prompt": "p0", "parent": "par0", "tuned": "t0", "untuned": "u0"}]
+    config = make_eval_config(run_id="reuse-run")
+
+    Evaluator(config, verbose=False).run(prompts, reused_answers)
+
+    assert len(save_calls) == 1
+    p, pa, t, u, run_dir = save_calls[0]
+    assert (p, pa, t, u) == (["p0"], ["par0"], ["t0"], ["u0"])
+    assert run_dir.endswith("reuse-run")
+
+
+def test_run_reused_answers_out_of_order_prompts_map_correctly(monkeypatch, make_eval_config):
+    # reused_answers is keyed by prompt text, not list position -- exercise the
+    # by_prompt = {a["prompt"]: a for a in reused_answers} lookup with the
+    # records deliberately out of order relative to `prompts`.
+    prompts = ["p0", "p1"]
+    _wire(
+        monkeypatch, prompts=prompts, parent=[], tuned=[], untuned=[],
+        sims=[0.5, 0.5], expect_reuse=True,
+        compare=lambda pairs: dict.fromkeys(pairs, "A"),
+    )
+    reused_answers = [
+        {"prompt": "p1", "parent": "par1", "tuned": "t1", "untuned": "u1"},
+        {"prompt": "p0", "parent": "par0", "tuned": "t0", "untuned": "u0"},
+    ]
+    config = make_eval_config(swap_positions=False)
+
+    result = Evaluator(config, verbose=False).run(prompts, reused_answers)
+
+    assert result["samples"] == [
+        {"prompt": "p0", "parent": "par0", "tuned": "t0", "untuned": "u0"},
+        {"prompt": "p1", "parent": "par1", "tuned": "t1", "untuned": "u1"},
+    ]

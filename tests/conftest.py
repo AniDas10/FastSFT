@@ -113,7 +113,7 @@ def make_eval_config():
     def _make(**overrides):
         from fastsft.eval.config import EvalConfig
 
-        params = {"adapter_dir": "modelsets/test-run"}
+        params = {"adapter_dir": "modelsets/test-run", "run_id": "eval-test-run"}
         params.update(overrides)
         return EvalConfig(**params)
 

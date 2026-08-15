@@ -122,6 +122,7 @@ def eval_results(distilled):
     from fastsft.eval.config import EvalConfig
     from fastsft.eval.evaluator import Evaluator
     from fastsft.eval.prompt_set import EvalPromptSet
+    from fastsft.helper import current_timestamp
     from fastsft.model.base import Model
 
     adapter_dir = distilled["adapter_dir"]
@@ -133,6 +134,7 @@ def eval_results(distilled):
         )
         config = EvalConfig(
             adapter_dir=adapter_dir,
+            run_id=current_timestamp(),
             num_eval_prompts=NUM_EVAL_PROMPTS,
             max_new_tokens=96,
             parent_instruction=MATHEMATICIAN_PROMPT,  # trustworthy styled-teacher reference
