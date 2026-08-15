@@ -27,8 +27,9 @@ def test_default_parent_temperature_is_high_for_variety():
 
 def test_breadth_exponent_favors_breadth_over_depth():
     # >0.5 means breadth:depth = N^exp : N^(1-exp) skews toward more distinct
-    # seed topics rather than more variants per topic.
-    assert BREADTH_EXPONENT == 2 / 3
+    # seed topics rather than more variants per topic. Set high (0.85) to
+    # actively favor topic diversity over per-topic complexity depth.
+    assert BREADTH_EXPONENT == 0.85
     assert BREADTH_EXPONENT > 0.5
 
 

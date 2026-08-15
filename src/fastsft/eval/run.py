@@ -2,9 +2,10 @@
 
     uv run python -m fastsft.eval.run [modelsets/<run_id>]
 
-Resolves the eval prompt set (reuse the latest, or generate + persist a fresh
-one), runs the Evaluator against the adapter, and writes eval_results.json next
-to the adapter. View the result with `python -m fastsft.eval.results_viewer`.
+Resolves the eval prompt set (reuse the latest, or generate a fresh one), runs
+the Evaluator against the adapter, and writes eval_prompts/eval_answers.json/
+eval_results.json together under this run's own evalsets/<run_id> folder. View
+the result with `python -m fastsft.eval.results_viewer`.
 """
 
 import fastsft.warnings_filter  # noqa: F401
@@ -24,12 +25,14 @@ from fastsft.eval.constants import (
     DEFAULT_EMBEDDING_MODEL,
     DEFAULT_MAX_NEW_TOKENS,
     DEFAULT_NUM_EVAL_PROMPTS,
+    EVAL_ANSWERS_FILENAME,
 )
 from fastsft.eval.evaluator import Evaluator
 from fastsft.eval.prompt_set import EvalPromptSet
-from fastsft.eval.results import save_results
+from fastsft.eval.results import load_answers, save_results
 from fastsft.helper import (
     current_timestamp,
+    evalsets_dir,
     latest_run_path,
     load_training_metadata,
     modelsets_dir,
@@ -41,32 +44,63 @@ from fastsft.validation_checks import validate_eval_flags
 
 
 def _resolve_prompt_set(args: Namespace, config: EvalConfig) -> EvalPromptSet:
-    """Loads an existing eval prompt set, or generates + persists a fresh one.
+    """Loads an existing eval prompt set, or generates a fresh one, then always
+    persists a copy under this eval run's own evalsets/<run_id>/eval_prompts --
+    so every run folder is self-contained, whether or not its prompts were reused.
 
     Priority: an explicit --eval-prompts-path; else --regenerate-prompts forces
     a new set; else reuse the latest saved set, generating one only if none
     exists yet (so scores stay comparable across adapters by default).
     """
+    prompt_set = None
     if args.eval_prompts_path:
         prompt_set = EvalPromptSet.load(args.eval_prompts_path)
         log(f"Loaded {len(prompt_set)} eval prompts from '{args.eval_prompts_path}'.")
-        return prompt_set
-
-    if not args.regenerate_prompts:
+    elif not args.regenerate_prompts:
         try:
             prompt_set = EvalPromptSet.load()
             log(f"Reusing latest saved eval prompt set ({len(prompt_set)} prompts).")
-            return prompt_set
         except FileNotFoundError:
             log("No saved eval prompt set found -- generating a fresh one.")
 
-    model = Model(model_id=config.parent_model)
-    prompt_set = EvalPromptSet.generate(
-        config.adapter_dir, model=model, num_prompts=config.num_eval_prompts
-    )
-    path = prompt_set.save(current_timestamp())
-    log(f"Generated and saved {len(prompt_set)} eval prompts to '{path}'.")
+    if prompt_set is None:
+        model = Model(model_id=config.parent_model)
+        prompt_set = EvalPromptSet.generate(
+            config.adapter_dir, model=model, num_prompts=config.num_eval_prompts
+        )
+        log(f"Generated {len(prompt_set)} fresh eval prompts.")
+
+    path = prompt_set.save(config.run_id)
+    log(f"Saved {len(prompt_set)} eval prompts to '{path}'.")
     return prompt_set
+
+
+def _resolve_reused_answers(
+    reuse_answers_from: str | None, prompt_set: EvalPromptSet
+) -> list[dict] | None:
+    """None unless the user explicitly passed --reuse-answers-from -- no implicit
+    "latest" guessing, since a stale reuse (wrong parent model, wrong adapter,
+    etc.) would silently corrupt the eval rather than fail loudly."""
+    if reuse_answers_from is None:
+        return None
+    run_dir = (
+        reuse_answers_from
+        if os.path.isdir(reuse_answers_from)
+        else os.path.join(evalsets_dir(), reuse_answers_from)
+    )
+    answers = load_answers(run_dir)
+    if answers is None:
+        raise FileNotFoundError(f"No {EVAL_ANSWERS_FILENAME} found under '{run_dir}'.")
+    covered = {a["prompt"] for a in answers}
+    missing = [p for p in prompt_set.prompts if p not in covered]
+    if missing:
+        raise ValueError(
+            f"'{run_dir}' is missing answers for {len(missing)}/{len(prompt_set)} "
+            "prompts in the current prompt set -- pick a --reuse-answers-from run "
+            "generated from the same prompt set, or drop the flag to regenerate."
+        )
+    log(f"Reusing {len(answers)} answers from '{run_dir}' -- skipping generation.")
+    return answers
 
 
 def _resolve_parent(args: Namespace, adapter_dir: str) -> tuple[str, str, int, float]:
@@ -133,6 +167,13 @@ def _input_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
         help="Load the eval prompt set from this specific path instead of the latest.",
     )
     parser.add_argument(
+        "--reuse-answers-from",
+        default=None,
+        help="Skip generation and reuse a prior eval run's answers -- an "
+        "evalsets/<run_id> dir or bare run_id. Must cover every prompt in the "
+        "resolved prompt set (errors otherwise). Default: always regenerate.",
+    )
+    parser.add_argument(
         "--parent-model",
         default=None,
         help="Parent teacher model id (default: inferred from the run's training "
@@ -178,8 +219,11 @@ def main() -> None:
     parent_model, parent_instruction, parent_max_tokens, parent_temperature = (
         _resolve_parent(args, adapter_dir)
     )
+    # This run's own id -- separate from adapter_dir's run id.
+    run_id = current_timestamp()
     config = EvalConfig(
         adapter_dir=adapter_dir,
+        run_id=run_id,
         parent_model=parent_model,
         judge_model=args.judge_model,
         embedding_model=args.embedding_model,
@@ -192,8 +236,10 @@ def main() -> None:
     )
 
     prompt_set = _resolve_prompt_set(args, config)
-    results = Evaluator(config).run(prompt_set.prompts)
-    path = save_results(results, adapter_dir)
+    reused_answers = _resolve_reused_answers(args.reuse_answers_from, prompt_set)
+    results = Evaluator(config).run(prompt_set.prompts, reused_answers)
+    run_dir = os.path.join(evalsets_dir(), run_id)
+    path = save_results(results, run_dir)
 
     tvu = results["comparisons"]["tuned_vs_untuned"]["win_rate"]
     log(

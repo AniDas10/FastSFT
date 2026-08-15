@@ -10,7 +10,7 @@ import math
 
 import pytest
 
-from fastsft.data.constants import MAX_PROMPT_ATTEMPTS
+from fastsft.data.constants import BREADTH_EXPONENT, MAX_PROMPT_ATTEMPTS
 from fastsft.data.prompt_generator import (
     GeneratedPrompts,
     PromptGenerator,
@@ -40,9 +40,10 @@ def test_seed_count_never_exceeds_num_samples_and_at_least_one(num_samples):
 
 
 def test_seed_count_equals_raw_formula_within_bounds():
-    # For a mid-range N the clamp is inactive, so it equals the bare formula.
+    # For a mid-range N the clamp is inactive, so it equals the bare formula
+    # (using the default breadth exponent).
     n = 27
-    assert seed_count(n) == math.ceil(n ** (2 / 3))
+    assert seed_count(n) == math.ceil(n ** BREADTH_EXPONENT)
 
 
 # --- _allocate --------------------------------------------------------------

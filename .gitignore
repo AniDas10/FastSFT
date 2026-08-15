@@ -4,6 +4,7 @@ __pycache__/
 *.pyc
 datasets/
 modelsets/
+evalsets/
 
 # Coverage
 .coverage

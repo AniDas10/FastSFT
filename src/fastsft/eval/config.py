@@ -20,6 +20,8 @@ class EvalConfig:
     """A single evaluation run against one saved adapter directory."""
 
     adapter_dir: str
+    # This eval run's own id (names its evalsets_dir()/<run_id> folder), distinct from adapter_dir's.
+    run_id: str
     parent_model: str = DEFAULT_PARENT_MODEL
     judge_model: str = DEFAULT_JUDGE_MODEL
     embedding_model: str = DEFAULT_EMBEDDING_MODEL
