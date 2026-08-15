@@ -13,6 +13,8 @@ from distilabel.distiset import Distiset
 
 from fastsft.constants import (
     DEFAULT_OUTPUT_DIR,
+    EVAL_PROMPTS_SUBDIR,
+    EVALSETS_OUTPUT_DIR,
     MODELSETS_OUTPUT_DIR,
     OUTPUT_DIR_ENV_VAR,
     RAW_OUTPUT_SUBDIR,
@@ -36,6 +38,12 @@ def modelsets_dir() -> str:
     return os.path.join(_output_root(), MODELSETS_OUTPUT_DIR)
 
 
+def evalsets_dir() -> str:
+    """Directory holding eval run folders (eval_prompts, eval_answers.json,
+    eval_results.json together, one folder per eval/run.py invocation)."""
+    return os.path.join(_output_root(), EVALSETS_OUTPUT_DIR)
+
+
 def current_timestamp() -> str:
     """Current time formatted as RUN_TIMESTAMP_FORMAT (naive/local on purpose)."""
     return datetime.now().strftime(RUN_TIMESTAMP_FORMAT)  # noqa: DTZ005
@@ -49,6 +57,15 @@ def load_data(path: str | None) -> Distiset | None:
 def save_distiset(dataset: Distiset, subdir: str, run_id: str) -> str:
     """Saves dataset to datasets_dir()/subdir/run_id; returns the path."""
     path = os.path.join(datasets_dir(), subdir, run_id)
+    dataset.save_to_disk(path)
+    return path
+
+
+def save_eval_prompts(dataset: Distiset, run_id: str) -> str:
+    """Saves the eval prompt set to evalsets_dir()/run_id/eval_prompts; returns
+    the path. Separate from save_distiset because the nesting is inverted
+    (run_id, then a fixed subfolder name) versus datasets_dir()'s subdir/run_id."""
+    path = os.path.join(evalsets_dir(), run_id, EVAL_PROMPTS_SUBDIR)
     dataset.save_to_disk(path)
     return path
 

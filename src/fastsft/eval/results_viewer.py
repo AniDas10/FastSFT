@@ -2,7 +2,7 @@
 presentation layer over eval/results.py's core logic, and the `python -m`
 entry point:
 
-    uv run python -m fastsft.eval.results_viewer [adapter_dir] [--json]
+    uv run python -m fastsft.eval.results_viewer [run_dir] [--json]
 
 Kept separate from the core so the data/logic (persist, load, interpret) carries
 no `rich` dependency and stays reusable on its own; this module imports that
@@ -20,7 +20,7 @@ from rich.text import Text
 
 from fastsft.eval.results import interpret, load_results, results_as_json
 from fastsft.findings_view import findings_panel
-from fastsft.helper import latest_run_path, modelsets_dir
+from fastsft.helper import evalsets_dir, latest_run_path
 
 console = Console()
 
@@ -105,10 +105,11 @@ def _samples_panel(results: dict) -> Panel | None:
     )
 
 
-def render(results: dict, adapter_dir: str) -> None:
+def render(results: dict, run_dir: str) -> None:
     console.print(
         Panel.fit(
-            f"[bold]Evaluation results[/bold]\n[dim]{adapter_dir}[/dim]\n"
+            f"[bold]Evaluation results[/bold]\n[dim]{run_dir}[/dim]\n"
+            f"adapter {results.get('adapter_dir', '?')}\n"
             f"{results.get('num_prompts', 0)} prompts · judge "
             f"{results.get('judge_model', '?')} · parent {results.get('parent_model', '?')}",
             border_style="cyan",
@@ -129,10 +130,10 @@ def main() -> None:
         description="Show a finished evaluation run's win rates, similarity, and takeaways."
     )
     parser.add_argument(
-        "adapter_dir",
+        "run_dir",
         nargs="?",
         default=None,
-        help="Adapter directory to read (default: latest run under modelsets/).",
+        help="Eval run directory to read (default: latest run under evalsets/).",
     )
     parser.add_argument(
         "--json",
@@ -140,12 +141,12 @@ def main() -> None:
         help="Emit the results (plus findings) as machine-readable JSON.",
     )
     args = parser.parse_args()
-    adapter_dir = args.adapter_dir or latest_run_path(modelsets_dir())
-    results = load_results(adapter_dir)
+    run_dir = args.run_dir or latest_run_path(evalsets_dir())
+    results = load_results(run_dir)
     if args.json:
         print(results_as_json(results))
     else:
-        render(results, adapter_dir)
+        render(results, run_dir)
 
 
 if __name__ == "__main__":

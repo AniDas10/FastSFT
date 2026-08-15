@@ -16,9 +16,11 @@ DEFAULT_INFERENCE_BATCH_SIZE = 8
 # Compare each pair twice with A/B swapped to cancel the judge's position bias.
 DEFAULT_SWAP_POSITIONS = True
 
-# Eval results are colocated with the adapter they describe (same place the
-# trainer writes training_stats.json), not in a dataset run folder.
+# Eval results live in evalsets_dir()/<run_id>/, one folder per eval/run.py invocation.
 EVAL_RESULTS_FILENAME = "eval_results.json"
+
+# Raw per-prompt answers, written right after generation so a judging failure doesn't lose them.
+EVAL_ANSWERS_FILENAME = "eval_answers.json"
 
 # Rubric (judge system prompt) for the pairwise quality comparison. Deliberately
 # generic -- it drives both tuned-vs-untuned and tuned-vs-parent comparisons.
