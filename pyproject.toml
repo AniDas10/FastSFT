@@ -6,6 +6,16 @@ dynamic = ["version"]
 description = "A CLI tool that distills a large LLM into a small one via synthetic-data generation, quality filtering, and fine-tuning."
 readme = "README.md"
 requires-python = ">=3.12"
+authors = [{name = "Aniruddha Das", email = "ani2004@gmail.com"}]
+keywords = ["llm", "distillation", "fine-tuning", "synthetic-data", "lora", "modal"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+]
 dependencies = [
     "datasets>=5.0.1",
     "distilabel[instructor,openai]>=1.5.3",
