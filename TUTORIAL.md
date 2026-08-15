@@ -8,9 +8,9 @@ that style, quality-checks it with a judge model, and fine-tunes a small
 "child" model on it — so you walk away with a tiny model that talks like the
 big one, for a fraction of the size and cost.
 
-This guide gets you from zero to a trained model in about 15 minutes. It's
-written for a hackathon: copy-paste commands, short explanations, and the
-shortcuts that matter when the clock is running.
+This guide gets you from zero to a trained model in about 15 minutes:
+copy-paste commands, short explanations, and the shortcuts that matter when
+you want to move fast.
 
 ---
 
@@ -102,8 +102,8 @@ What each part means:
   (20–50) so you can iterate fast, then scale up.
 - `--child-model-id` — the small model you're fine-tuning, as a
   [Hugging Face](https://huggingface.co) repo id. `Qwen2.5-0.5B-Instruct` is a
-  great hackathon default: tiny, fast, and trains on a laptop.
-- `--local` — train on *this* machine instead of the cloud. Perfect for a demo.
+  great default to start with: tiny, fast, and trains on a laptop.
+- `--local` — train on *this* machine instead of the cloud. Perfect for quick iteration.
 - `--max-epochs 1` — a ceiling on training passes (it stops early on its own).
   Keep it low for a quick first run.
 
@@ -132,7 +132,7 @@ the fastest, cheapest thing to iterate on.
 
 ## 5. What's happening under the hood (optional)
 
-You don't need this to use FastSFT, but it helps when you're demoing to judges.
+You don't need this to use FastSFT, but it helps when you're explaining or debugging what happened.
 
 **DataGenerator** does four things:
 
@@ -156,7 +156,7 @@ validation and stops training automatically when it stops improving.
 
 ---
 
-## 6. Knobs worth turning at a hackathon
+## 6. Knobs worth turning early
 
 | Flag | Why you'd use it |
 |------|------------------|
@@ -241,7 +241,7 @@ for the full guide.
 
 ---
 
-## 9. Hackathon playbook
+## 9. Recommended playbook
 
 A battle-tested order of operations when you're short on time:
 
@@ -253,8 +253,8 @@ A battle-tested order of operations when you're short on time:
    `--num-samples` to 100+.
 4. **Train for real.** Re-run from `--start-stage fine_tuner` with a couple
    epochs. Save the earlier stages' work.
-5. **Demo it.** Load the adapter from `modelsets/<timestamp>/` with
-   `transformers` + `peft` and show your tiny model doing the thing.
+5. **Try it out.** Load the adapter from `modelsets/<timestamp>/` with
+   `transformers` + `peft` and see your tiny model doing the thing.
 
 ---
 
@@ -271,5 +271,5 @@ A battle-tested order of operations when you're short on time:
 
 ---
 
-**That's the whole tool.** Describe a model, generate data, fine-tune, demo.
+**That's the whole tool.** Describe a model, generate data, fine-tune, try it out.
 Now go build something. 🏴‍☠️
