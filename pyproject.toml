@@ -6,7 +6,6 @@ dynamic = ["version"]
 description = "A CLI tool that distills a large LLM into a small one via synthetic-data generation, quality filtering, and fine-tuning."
 readme = "README.md"
 requires-python = ">=3.12"
-authors = [{name = "Aniruddha Das", email = "ani2004@gmail.com"}]
 dependencies = [
     "datasets>=5.0.1",
     "distilabel[instructor,openai]>=1.5.3",
