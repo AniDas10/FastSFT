@@ -54,7 +54,7 @@ packages = ["src/fastsft"]
 # mypy type-checks src/fastsft; see [tool.mypy] below for why it never needs
 # the ML extras installed to run.
 dev = [
-    "ruff>=0.16.1,<0.17",
+    "ruff>=0.16.2,<0.17",
     "pytest>=8.0",
     "pytest-cov>=5.0",
     "mypy>=2.3.0",
