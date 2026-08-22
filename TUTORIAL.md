@@ -12,6 +12,11 @@ This guide gets you from zero to a trained model in about 15 minutes:
 copy-paste commands, short explanations, and the shortcuts that matter when
 you want to move fast.
 
+> **In a hurry?** [`trial_run.py`](trial_run.py) in the repo root runs this
+> exact generate → format → train flow in one script, with every config field
+> and its default spelled out in the comments. Run it directly, or keep it
+> open alongside this guide as a reference while you read.
+
 ---
 
 ## 1. The one-minute mental model

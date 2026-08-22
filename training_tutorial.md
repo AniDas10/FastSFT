@@ -4,6 +4,10 @@
 
 This tutorial covers DataFormatter (chat template rendering) and FineTuner (LoRA/QLoRA training).
 
+> **Reference:** [`trial_run.py`](trial_run.py) in the repo root is a runnable
+> script with every `TrainingConfig` field (adapter + training loop) spelled
+> out at its default, plus alternatives to try in the comments above each one.
+
 ## The Two Training Stages
 
 ### Stage 1: DataFormatter
