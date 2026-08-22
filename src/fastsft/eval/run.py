@@ -37,6 +37,7 @@ from fastsft.helper import (
     load_training_metadata,
     modelsets_dir,
 )
+from fastsft.hf_helper import resolve_input
 from fastsft.model.base import Model
 from fastsft.model.constants import DEFAULT_MAX_TOKENS
 from fastsft.progress import log
@@ -148,7 +149,8 @@ def _input_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
         "adapter_dir",
         nargs="?",
         default=None,
-        help="Adapter directory to evaluate (default: latest run under modelsets/).",
+        help="Adapter directory to evaluate, or a Hugging Face Hub model repo "
+        "id (default: latest run under modelsets/).",
     )
     parser.add_argument(
         "--num-eval-prompts",
@@ -213,7 +215,11 @@ def main() -> None:
     if args.output_dir:
         os.environ[OUTPUT_DIR_ENV_VAR] = args.output_dir
 
-    adapter_dir = args.adapter_dir or latest_run_path(modelsets_dir())
+    adapter_dir = (
+        resolve_input(args.adapter_dir, "model")
+        if args.adapter_dir
+        else latest_run_path(modelsets_dir())
+    )
     log(f"Evaluating adapter '{adapter_dir}'.")
 
     parent_model, parent_instruction, parent_max_tokens, parent_temperature = (

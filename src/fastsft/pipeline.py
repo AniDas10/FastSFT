@@ -37,6 +37,8 @@ class DistillationPipeline:
         training: TrainingConfig | None = None,
         local_training: bool = False,
         start_stage: str = STAGE_ORDER[0],
+        dataset_repo_id: str | None = None,
+        model_repo_id: str | None = None,
         verbose: bool = True,
     ):
         self._validate_start_stage(start_stage)
@@ -48,6 +50,8 @@ class DistillationPipeline:
             generation=generation or DataGenerationConfig(),
             training=training,
             local_training=local_training,
+            dataset_repo_id=dataset_repo_id,
+            model_repo_id=model_repo_id,
             verbose=verbose,
         )
 
@@ -63,6 +67,8 @@ class DistillationPipeline:
         generation: DataGenerationConfig,
         training: TrainingConfig | None,
         local_training: bool,
+        dataset_repo_id: str | None,
+        model_repo_id: str | None,
         verbose: bool,
     ) -> list[Stage]:
         """Build only the stages from start_index onward."""
@@ -79,12 +85,15 @@ class DistillationPipeline:
                 verbose=verbose,
             ),
             DATA_FORMATTER: lambda: DataFormatter(
-                child_model_id=child_model_id, verbose=verbose
+                child_model_id=child_model_id,
+                dataset_repo_id=dataset_repo_id,
+                verbose=verbose,
             ),
             FINE_TUNER: lambda: FineTuner(
                 child_model_id=child_model_id,
                 training_config=training,
                 local_training=local_training,
+                model_repo_id=model_repo_id,
                 verbose=verbose,
             ),
         }

@@ -6,7 +6,8 @@ bad combination -- kept out of helper.py so that stays data/IO helpers only.
 
 import argparse
 
-from fastsft.stages.constants import STAGE_ORDER
+from fastsft.hf_helper import has_token, repo_id_error
+from fastsft.stages.constants import DATA_FORMATTER, STAGE_ORDER
 
 
 def validate_start_stage(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
@@ -60,3 +61,34 @@ def validate_eval_flags(args: argparse.Namespace, parser: argparse.ArgumentParse
     """Validate that --num-eval-prompts is positive."""
     if args.num_eval_prompts <= 0:
         parser.error(f"--num-eval-prompts must be positive, got {args.num_eval_prompts}.")
+
+
+def validate_hf_flags(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
+    """Validate --dataset-repo-id/--model-repo-id before any paid stage runs:
+    the pushing stage actually runs, repo ids are well-formed, and a Hub token
+    is available -- so a typo or missing login fails fast instead of surfacing
+    only after a billed Modal GPU run completes."""
+    if args.dataset_repo_id and STAGE_ORDER.index(args.start_stage) > STAGE_ORDER.index(
+        DATA_FORMATTER
+    ):
+        parser.error(
+            f"--dataset-repo-id has no effect when --start-stage={args.start_stage} -- "
+            f"only {DATA_FORMATTER} pushes the dataset, and it's skipped at that start "
+            "stage. Drop --dataset-repo-id, or start from an earlier stage."
+        )
+
+    for flag, repo_id in (
+        ("--dataset-repo-id", args.dataset_repo_id),
+        ("--model-repo-id", args.model_repo_id),
+    ):
+        if repo_id is None:
+            continue
+        error = repo_id_error(repo_id)
+        if error:
+            parser.error(f"{flag} '{repo_id}' is not a valid Hugging Face repo id: {error}")
+
+    if (args.dataset_repo_id or args.model_repo_id) and not has_token():
+        parser.error(
+            "--dataset-repo-id/--model-repo-id require a Hugging Face token -- "
+            "set HF_TOKEN (in .env or the environment), or run `huggingface-cli login`."
+        )

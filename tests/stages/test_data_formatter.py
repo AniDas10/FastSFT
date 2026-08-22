@@ -10,8 +10,10 @@ from fastsft.helper import convert_to_distiset
 from fastsft.stages.data_formatter import DataFormatter
 
 
-def _formatter():
-    return DataFormatter(child_model_id="child/model", verbose=False)
+def _formatter(**overrides):
+    params = {"child_model_id": "child/model", "verbose": False}
+    params.update(overrides)
+    return DataFormatter(**params)
 
 
 def _distiset(rows):
@@ -117,3 +119,38 @@ def test_save_output_persists_under_formatted_subdir(monkeypatch):
     assert subdir == FORMATTED_OUTPUT_SUBDIR
     assert run_id == "run-7"
     assert path == f"datasets/{FORMATTED_OUTPUT_SUBDIR}/run-7"
+
+
+def test_save_output_pushes_to_hub_when_repo_id_set(monkeypatch):
+    monkeypatch.setattr(
+        "fastsft.stages.data_formatter.save_distiset",
+        lambda output, subdir, run_id: "datasets/formatted/run-7",
+    )
+    calls = []
+    monkeypatch.setattr(
+        "fastsft.stages.data_formatter.push_to_hub",
+        lambda local_dir, repo_id, repo_type: calls.append((local_dir, repo_id, repo_type))
+        or "https://huggingface.co/datasets/org/name",
+    )
+
+    formatter = _formatter(dataset_repo_id="org/name")
+    path = formatter.save_output(object(), run_id="run-7")
+
+    assert path == "datasets/formatted/run-7"
+    assert calls == [("datasets/formatted/run-7", "org/name", "dataset")]
+
+
+def test_save_output_skips_hub_push_when_repo_id_absent(monkeypatch):
+    monkeypatch.setattr(
+        "fastsft.stages.data_formatter.save_distiset",
+        lambda output, subdir, run_id: "datasets/formatted/run-7",
+    )
+    calls = []
+    monkeypatch.setattr(
+        "fastsft.stages.data_formatter.push_to_hub",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    _formatter().save_output(object(), run_id="run-7")
+
+    assert calls == []

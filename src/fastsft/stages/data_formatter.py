@@ -5,6 +5,7 @@ from transformers import AutoTokenizer, PreTrainedTokenizerBase
 
 from fastsft.constants import FORMATTED_OUTPUT_SUBDIR
 from fastsft.helper import convert_to_distiset, save_distiset
+from fastsft.hf_helper import push_to_hub
 from fastsft.stages.base import Stage
 from fastsft.stages.constants import DATA_FORMATTER
 
@@ -17,9 +18,15 @@ class DataFormatter(Stage):
     name = DATA_FORMATTER
     title = "Data Formatting Stage"
 
-    def __init__(self, child_model_id: str, verbose: bool = True):
+    def __init__(
+        self,
+        child_model_id: str,
+        dataset_repo_id: str | None = None,
+        verbose: bool = True,
+    ):
         super().__init__(verbose=verbose)
         self._child_model_id = child_model_id
+        self._dataset_repo_id = dataset_repo_id
         self._tokenizer: PreTrainedTokenizerBase | None = None
 
     def _load_tokenizer(self) -> PreTrainedTokenizerBase:
@@ -35,7 +42,11 @@ class DataFormatter(Stage):
         return self._tokenizer
 
     def save_output(self, output: Distiset, run_id: str) -> str:
-        return save_distiset(output, FORMATTED_OUTPUT_SUBDIR, run_id)
+        path = save_distiset(output, FORMATTED_OUTPUT_SUBDIR, run_id)
+        if self._dataset_repo_id:
+            url = push_to_hub(path, self._dataset_repo_id, "dataset")
+            self._log(f"Pushed formatted dataset to '{url}'.")
+        return path
 
     def _validate_input(self, distiset: Distiset) -> None:
         train = distiset["default"]["train"]

@@ -43,11 +43,14 @@ def run_main(monkeypatch):
     """Runs main() with the given argv, the pipeline + IO tail patched out.
     Returns the _RecordingPipeline instance that main() constructed."""
 
-    def _run(argv, input_marker="LOADED_DATASET"):
+    def _run(argv, input_marker="LOADED_DATASET", resolve_input_fn=None):
         _RecordingPipeline.last = None
         monkeypatch.setattr(main_mod, "DistillationPipeline", _RecordingPipeline)
         monkeypatch.setattr(main_mod, "load_data", lambda path: input_marker)
         monkeypatch.setattr(main_mod, "current_timestamp", lambda: "RUNID")
+        monkeypatch.setattr(
+            main_mod, "resolve_input", resolve_input_fn or (lambda path, repo_type: path)
+        )
         monkeypatch.setattr(sys, "argv", ["fastsft", *argv])
         main_mod.main()
         return _RecordingPipeline.last
@@ -88,6 +91,63 @@ def test_later_stage_uses_load_data_and_no_generation(run_main):
     assert pipe.kwargs["generation"] is None
     # Non-default start stage feeds the loaded dataset, not the prompt.
     assert pipe.run_input == "FORMATTED_DS"
+
+
+def test_input_path_resolved_via_hf_helper_before_load(run_main):
+    captured = {}
+
+    def fake_resolve(path, repo_type):
+        captured["args"] = (path, repo_type)
+        return "RESOLVED_LOCAL_PATH"
+
+    run_main(
+        ["--start-stage", LATER_STAGE, "--input-path", "org/dataset-name"],
+        input_marker="FORMATTED_DS",
+        resolve_input_fn=fake_resolve,
+    )
+    assert captured["args"] == ("org/dataset-name", "dataset")
+
+
+# --- Hub push flags ----------------------------------------------------------
+
+def test_dataset_and_model_repo_id_flow_into_pipeline_kwargs(run_main, monkeypatch):
+    monkeypatch.setenv("HF_TOKEN", "hf_test_token")
+    pipe = run_main(
+        ["p", "--dataset-repo-id", "org/dataset-name", "--model-repo-id", "org/model-name"]
+    )
+    assert pipe.kwargs["dataset_repo_id"] == "org/dataset-name"
+    assert pipe.kwargs["model_repo_id"] == "org/model-name"
+
+
+def test_repo_id_flags_default_to_none(run_main):
+    pipe = run_main(["p"])
+    assert pipe.kwargs["dataset_repo_id"] is None
+    assert pipe.kwargs["model_repo_id"] is None
+
+
+# --- Hub flag validation: fail fast, before any paid stage runs -------------
+
+def test_dataset_repo_id_without_hf_token_exits(run_main, monkeypatch):
+    monkeypatch.delenv("HF_TOKEN", raising=False)
+    monkeypatch.setattr("fastsft.validation_checks.has_token", lambda: False)
+    with pytest.raises(SystemExit):
+        run_main(["p", "--dataset-repo-id", "org/dataset-name"])
+
+
+def test_malformed_repo_id_exits(run_main, monkeypatch):
+    monkeypatch.setenv("HF_TOKEN", "hf_test_token")
+    with pytest.raises(SystemExit):
+        run_main(["p", "--model-repo-id", "too/many/slashes"])
+
+
+def test_dataset_repo_id_with_skipped_formatter_stage_exits(run_main, monkeypatch):
+    monkeypatch.setenv("HF_TOKEN", "hf_test_token")
+    with pytest.raises(SystemExit):
+        run_main(
+            ["--start-stage", LATER_STAGE, "--input-path", "datasets/formatted/run",
+             "--dataset-repo-id", "org/dataset-name"],
+            input_marker="FORMATTED_DS",
+        )
 
 
 # --- training-config construction ------------------------------------------
