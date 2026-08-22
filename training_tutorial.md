@@ -34,6 +34,19 @@ uv run fastsft --start-stage data_formatter \
 
 The child model's chat template is loaded from Hugging Face Hub and applied without downloading weights — fast and free.
 
+**Sharing the formatted dataset (optional):** add `--dataset-repo-id you/my-dataset` to
+also push it to your Hugging Face Hub account, in addition to the local save
+under `datasets/formatted/`. `--input-path` accepts a Hub dataset repo id
+anywhere it accepts a local path, so a later stage can pull it back down
+instead of needing the local file:
+
+```bash
+uv run fastsft --start-stage fine_tuner --input-path you/my-dataset --local
+```
+
+This needs a Hugging Face token: run `huggingface-cli login` once, or set
+`HF_TOKEN` in your `.env`.
+
 ### Stage 2: FineTuner
 
 Performs LoRA or QLoRA fine-tuning, either locally or on Modal's cloud GPUs.
@@ -170,6 +183,14 @@ outputs = model.generate(**inputs)
 print(tokenizer.decode(outputs[0]))
 ```
 
+**Sharing the trained adapter (optional):** add `--model-repo-id you/my-model`
+to also push it to your Hugging Face Hub account, in addition to the local
+save under `modelsets/`. Each push uploads to its own `you/my-model/<run_id>/`
+folder (repeated pushes accumulate rather than overwrite), so use
+`PeftModel.from_pretrained("you/my-model", subfolder="<run_id>")` to load a
+specific run directly, or `fastsft-eval you/my-model` to pull back the latest
+run automatically for evaluation.
+
 ## Common Training Patterns
 
 ### Situation: "I want to iterate quickly on small data"
@@ -224,6 +245,7 @@ Note: Currently, restarting always trains from scratch; resuming from a checkpoi
 | `src/fastsft/training/stats.py` | Core: load and interpret training telemetry |
 | `src/fastsft/training/stats_viewer.py` | CLI: visualize loss curves and diagnostics |
 | `src/fastsft/training/config.py` | TrainingConfig, AdapterConfig, TrainingLoopConfig |
+| `src/fastsft/hf_helper.py` | Hugging Face Hub push (`--dataset-repo-id`/`--model-repo-id`) and repo-id-as-input resolution |
 
 ## Troubleshooting
 
@@ -235,6 +257,7 @@ Note: Currently, restarting always trains from scratch; resuming from a checkpoi
 | Loss doesn't decrease | Increase `--learning-rate` or `--max-epochs`; reduce `--batch-size`. |
 | Validation loss rises sharply | Reduce `--lora-rank` or lower learning rate; training is overfitting. |
 | Modal dispatch fails | Run `modal token new` to re-authenticate. |
+| `401`/`403` pushing/pulling `--dataset-repo-id`/`--model-repo-id` | Run `huggingface-cli login`, or set `HF_TOKEN` in `.env`. |
 
 ## Next Steps
 

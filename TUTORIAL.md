@@ -206,6 +206,38 @@ To force a specific GPU: `--gpu-tier A100-40GB`.
 
 ---
 
+## 7b. Sharing datasets and models via Hugging Face Hub (optional)
+
+Everything is saved locally by default. If you'd rather hand a dataset or
+trained adapter to a teammate (or another machine) instead of copying files
+around, push it to your own Hugging Face Hub account in addition to the local
+save:
+
+```bash
+uv run fastsft "..." --dataset-repo-id you/my-dataset --model-repo-id you/my-model --local
+```
+
+This needs a Hugging Face token — either run `huggingface-cli login` once, or
+set `HF_TOKEN` in your `.env`:
+
+```bash
+echo "HF_TOKEN=hf_your-token-here" >> .env
+```
+
+Anywhere FastSFT accepts a local path as input, it also accepts a Hub repo id
+in its place — it's auto-detected, so no extra flag is needed:
+
+```bash
+uv run fastsft --start-stage data_formatter --input-path you/my-dataset
+uv run python -m fastsft.eval.run you/my-model
+```
+
+Each push goes to its own `<repo>/<run_id>/` folder, so repeated pushes to the
+same repo id accumulate rather than overwrite — pulling a repo id always
+resolves to the latest pushed run.
+
+---
+
 ## 8. Inspect, Edit, and Resume
 
 Data generation is expensive (API calls cost $). Before spending more, inspect and fix:
@@ -272,6 +304,7 @@ A battle-tested order of operations when you're short on time:
 | `... has no hugging_face_id` | Your `--parent-model` is closed-weight. Use an open one (the default is fine). |
 | `--strategy qlora requires CUDA` | QLoRA needs an NVIDIA GPU. Use plain `lora` locally, or train on Modal. |
 | `modal.AuthError` | Run `modal token new`, or add `--local` to skip the cloud. |
+| `401`/`403` pushing or pulling a Hub repo | Run `huggingface-cli login`, or set `HF_TOKEN` in `.env` (§7b). |
 | Structured-output / empty-response errors | The guide/judge model needs tool-call support. Stick to the defaults. |
 
 ---

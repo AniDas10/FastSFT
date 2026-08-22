@@ -170,6 +170,38 @@ uv run fastsft "..." --num-samples 50 --score-threshold 7
 uv run fastsft --start-stage data_formatter --input-path datasets/raw/20260809_120000
 ```
 
+## Sharing Datasets via Hugging Face Hub
+
+Local disk (`datasets/raw/`, `datasets/formatted/`) is always where output is
+saved. If you'd rather hand the dataset to a teammate or another machine
+instead of copying files, add `--dataset-repo-id you/my-dataset` to push the
+*formatted* dataset (DataFormatter's output — the one FineTuner actually
+trains on) to your Hugging Face Hub account too, once it reaches that stage:
+
+```bash
+uv run fastsft "your prompt" --num-samples 50 --dataset-repo-id you/my-dataset --local
+```
+
+This needs a Hugging Face token: run `huggingface-cli login` once, or set
+`HF_TOKEN` in your `.env`. Note `--dataset-repo-id` only has an effect when
+DataFormatter actually runs this invocation — passing it alongside
+`--start-stage fine_tuner` (which skips DataFormatter) is rejected up front.
+
+Wherever `fastsft` accepts a local `--input-path`, it also accepts a Hub
+dataset repo id in its place, auto-detected — no local copy needed:
+
+```bash
+uv run fastsft --start-stage data_formatter --input-path you/my-dataset
+```
+
+(This repo-id auto-detection is specific to the `fastsft` CLI's own
+`--input-path` and `fastsft-eval`'s adapter argument — `fastsft.data.viewer`'s
+`--input-path` still expects a local directory only.)
+
+Each push goes to its own `<repo>/<run_id>/` folder, so repeated pushes to the
+same repo id accumulate rather than overwrite — pulling a repo id always
+resolves to the latest pushed run.
+
 ## Using Your Own Dataset
 
 FastSFT accepts **Distiset format** (the native format used internally). You can:
@@ -362,6 +394,7 @@ This sidecar is critical for later evaluation — it lets the eval module recons
 | `src/fastsft/data/refiner.py` | DataRefiner: judge-scored quality filtering |
 | `src/fastsft/data/viewer.py` | DataViewer CLI for inspecting results |
 | `src/fastsft/data/config.py` | DataGenerationConfig dataclass |
+| `src/fastsft/hf_helper.py` | Hugging Face Hub push (`--dataset-repo-id`) and repo-id-as-input resolution |
 
 ## Crafting Effective Prompts
 
@@ -455,6 +488,8 @@ So be explicit:
 | Too many samples rejected (low scores) | The judge instruction was unclear. Try a more detailed prompt with concrete traits. Lower `--score-threshold` only as a last resort. |
 | Data is only about one domain | Your prompt didn't clearly say "anything" or "all topics". Try: `"Respond like an engineer to ANY question, even non-software ones"` |
 | `... has no chat_template` on later stages | This error is from DataFormatter, meaning you changed to an incompatible `--child-model-id` after generation — rerun generation or use the same model. |
+| `401`/`403` pushing/pulling `--dataset-repo-id` or a repo-id `--input-path` | Run `huggingface-cli login`, or set `HF_TOKEN` in `.env`. |
+| `--dataset-repo-id has no effect when --start-stage=...` | DataFormatter (the stage that pushes the dataset) is skipped at that start stage — drop the flag or start earlier. |
 
 ## Next Steps
 
