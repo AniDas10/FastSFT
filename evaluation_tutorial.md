@@ -4,6 +4,10 @@
 
 This tutorial covers post-training evaluation: scoring your adapted model against its base and the parent teacher using LLM judges and embedding similarity.
 
+> **Reference:** running [`trial_run.py`](trial_run.py) prints the exact
+> `fastsft-eval` / `results_viewer` commands to run next, once training
+> finishes.
+
 ## Quick Start
 
 ```bash

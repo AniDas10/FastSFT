@@ -4,6 +4,10 @@
 
 This tutorial walks through the data generation pipeline, from describing your desired dataset to inspecting the quality-filtered results.
 
+> **Reference:** [`trial_run.py`](trial_run.py) in the repo root is a runnable
+> script with every `DataGenerationConfig` field spelled out at its default,
+> plus alternatives to try in the comments above each one.
+
 ## Quick Overview
 
 FastSFT's **DataGenerator** (`src/fastsft/stages/data_generator.py`) transforms a one-sentence description into a quality-filtered dataset of Q&A pairs. It runs four internal steps:
