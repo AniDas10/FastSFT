@@ -654,6 +654,7 @@ source = { editable = "." }
 dependencies = [
     { name = "datasets" },
     { name = "distilabel", extra = ["instructor", "openai"] },
+    { name = "huggingface-hub" },
     { name = "modal" },
     { name = "pillow" },
     { name = "pydantic" },
@@ -691,6 +692,7 @@ requires-dist = [
     { name = "accelerate", marker = "extra == 'local-training'" },
     { name = "datasets", specifier = ">=5.0.1" },
     { name = "distilabel", extras = ["instructor", "openai"], specifier = ">=1.5.3" },
+    { name = "huggingface-hub", specifier = ">=0.26.0" },
     { name = "modal", specifier = ">=0.65.0" },
     { name = "peft", marker = "extra == 'evaluation'" },
     { name = "peft", marker = "extra == 'local-training'" },
