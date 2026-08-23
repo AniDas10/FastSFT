@@ -34,12 +34,7 @@ COMPARISON_JUDGE_INSTRUCTION = (
     "quality."
 )
 
-# Rubric for the parent-likeness comparison: which candidate answer is more like
-# the reference (parent) in STYLE -- tone, voice, structure, formatting,
-# verbosity -- regardless of which is more correct. This is the metric aligned
-# with the phase-0 distillation objective (voice/tone transfer) that the
-# generic-quality rubric above doesn't capture; it excludes correctness (the
-# quality metric's job) so the two stay orthogonal.
+# Style-only rubric (voice/tone transfer, the phase-0 objective); excludes correctness to stay orthogonal to the quality rubric above.
 STYLE_JUDGE_INSTRUCTION = (
     "You are given a user question, a REFERENCE response, and two candidate "
     "responses, A and B. Decide which candidate more closely matches the "

@@ -273,9 +273,7 @@ def main() -> None:
         else load_data(resolve_input(args.input_path, "dataset"))
     )
 
-    # Only relevant when starting from DataGenerator -- omitted otherwise so
-    # DistillationPipeline's own default applies (mirrors how `training`
-    # below is only built when the caller actually wants to override it).
+    # Only relevant when starting from DataGenerator; omitted otherwise so DistillationPipeline's own default applies.
     generation = (
         DataGenerationConfig(
             guide_model=args.guide_model,
@@ -293,10 +291,7 @@ def main() -> None:
         else None
     )
 
-    # Collect only the flags the caller actually set (`is not None`, not truthy:
-    # 0/0.0 are meaningful here, e.g. --lora-dropout 0). Splatting these lets
-    # each dataclass supply its own defaults, so the defaults live in exactly
-    # one place (training/config.py) and are never restated here.
+    # Only flags the caller actually set (`is not None`, not truthy -- 0/0.0 are meaningful, e.g. --lora-dropout 0).
     adapter_overrides = {
         k: v
         for k, v in {
@@ -328,11 +323,7 @@ def main() -> None:
         if v is not None
     }
 
-    # Left as None (letting FineTuner decide: the Modal cost heuristic, or local
-    # defaults with --local) unless --gpu-tier, or --local plus at least one
-    # override, asks for an explicit config. gpu_tier is the one required field
-    # with no default -- Modal needs the chosen tier; --local's sole "tier" is
-    # this machine.
+    # Left as None (FineTuner decides) unless --gpu-tier, or --local plus an override, asks for an explicit config.
     overrides_given = bool(adapter_overrides or loop_overrides or top_overrides)
     training = (
         TrainingConfig(
@@ -354,9 +345,7 @@ def main() -> None:
         dataset_repo_id=args.dataset_repo_id,
         model_repo_id=args.model_repo_id,
     )
-    # One run_id for the whole run, so each stage's output folder shares it.
-    # Each stage is saved the moment it completes, so a later stage's failure
-    # (e.g. a Modal auth error at dispatch) can't lose an earlier one's output.
+    # One run_id for the whole run; each stage saves as it completes so a later failure can't lose an earlier output.
     run_id = current_timestamp()
     for stage, output in pipeline.run(pipeline_input):
         path = stage.save_output(output, run_id)

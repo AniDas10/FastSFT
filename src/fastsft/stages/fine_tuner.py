@@ -164,8 +164,6 @@ class FineTuner(Stage):
 
         extract_dir = tempfile.mkdtemp(prefix="finetuner_adapter_")
         with tarfile.open(local_tar_path, "r:gz") as tar:
-            # filter="data" blocks path-traversal/special-file entries and is
-            # the default in Python 3.14; set explicitly to silence the 3.12
-            # deprecation warning and lock the behavior in.
+            # filter="data" blocks path-traversal/special-file entries; explicit since it's not yet the 3.12 default.
             tar.extractall(extract_dir, filter="data")
         return extract_dir

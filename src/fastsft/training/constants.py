@@ -1,9 +1,6 @@
 """Constants for the training package (FineTuner's config heuristic + Modal job)."""
 
-# Modal GPU tier catalog: name -> (vram_gb, approx_usd_per_hour).
-# NOTE: these are approximate published Modal figures at time of writing --
-# verify against modal.com/pricing before relying on them; both the tier
-# list and pricing drift over time.
+# Modal GPU tier catalog: name -> (vram_gb, approx_usd_per_hour); verify against modal.com/pricing, both drift.
 # No T4: lacks FlashAttention + native bf16, trains much slower despite the lower $/hr.
 MODAL_GPU_TIERS = {
     "L4": (24, 0.80),
@@ -47,13 +44,8 @@ MAX_EPOCHS = 10
 EVAL_STEPS = 20
 EARLY_STOPPING_PATIENCE = 3
 
-# Mask the prompt (system+user) tokens from the loss so training/eval loss
-# reflects the answer only. On by default; the trainer resolves HOW to mask in
-# a model-agnostic way (see training/trainer.py::_resolve_loss_masking). Set
-# False to fall back to loss over the whole formatted sequence.
+# Mask prompt tokens from the loss (answer-only); trainer resolves HOW model-agnostically (see trainer.py).
 DEFAULT_MASK_PROMPT_LOSS = True
 
-# Passing this single value as target_modules makes PEFT auto-target every
-# linear layer, regardless of a model's attention-projection naming -- the
-# model-agnostic escape hatch for architectures the default names don't fit.
+# Auto-targets every linear layer via PEFT; escape hatch for architectures the default names don't fit.
 ALL_LINEAR_TARGET = "all-linear"

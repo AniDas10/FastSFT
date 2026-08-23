@@ -15,9 +15,7 @@ from typing import cast
 from fastsft.eval.constants import EVAL_ANSWERS_FILENAME, EVAL_RESULTS_FILENAME
 from fastsft.findings import Finding
 
-# Standard errors from 50% a win rate must clear to count as a real edge, not
-# noise. Conservative on purpose: LLM-judge verdicts add noise on top of prompt
-# sampling, and a wrong verdict here would misdirect a training decision.
+# Standard errors from 50% a win rate must clear to count as real; conservative since a wrong call misdirects training.
 WIN_MARGIN_SIGMAS = 1.5
 # Minimum mean-cosine change to call a shift toward/away from the parent real.
 SIM_MARGIN = 0.01

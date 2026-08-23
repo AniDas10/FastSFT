@@ -42,9 +42,7 @@ class TrainingLoopConfig:
     eval_steps: int = EVAL_STEPS
     early_stopping_patience: int = EARLY_STOPPING_PATIENCE
     validation_split: float = DEFAULT_VALIDATION_SPLIT
-    # Mask prompt tokens from the loss (answer-only loss). The trainer picks a
-    # model-agnostic masking strategy at runtime; False = loss over the whole
-    # sequence.
+    # Mask prompt tokens from the loss (answer-only); False = loss over the whole sequence.
     mask_prompt_loss: bool = DEFAULT_MASK_PROMPT_LOSS
 
 
@@ -53,15 +51,11 @@ class TrainingConfig:
     """A single candidate fine-tuning configuration."""
 
     gpu_tier: str
-    # Whether the frozen base model is quantized -- a compute/memory choice
-    # paired with gpu_tier (the heuristic searches both jointly), not part of
-    # the adapter's own shape.
+    # Whether the frozen base model is quantized; paired with gpu_tier (heuristic searches both jointly).
     strategy: str = DEFAULT_STRATEGY  # training.constants.LORA | QLORA
     adapter: AdapterConfig = field(default_factory=AdapterConfig)
     loop: TrainingLoopConfig = field(default_factory=TrainingLoopConfig)
     modal_timeout_seconds: int = DEFAULT_MODAL_TIMEOUT_SECONDS
-    # Cost/memory estimates from the heuristic (training.heuristic); purely
-    # informational (logged, never read by the Modal training job) -- left
-    # at 0.0 for a manually-constructed config with no heuristic estimate.
+    # Cost/memory estimates from the heuristic; purely informational, never read by the training job.
     est_memory_gb: float = 0.0
     est_usd_per_hour: float = 0.0

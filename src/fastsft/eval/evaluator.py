@@ -91,9 +91,7 @@ class Evaluator(ProgressLogger):
         tuned_vs_untuned = self._win_rate(judge, prompts, tuned, untuned)
 
         self._log("[3/5] Judging parent-style match (tuned vs untuned)...")
-        # Distillation objective: is the tuned child more like the parent's style
-        # than untuned? Only as good as the reference -- the true styled teacher
-        # when parent_instruction is set, else the parent with no system prompt.
+        # Distillation objective: is the tuned child more like the parent's style than untuned?
         parent_likeness = self._win_rate(
             judge, prompts, tuned, untuned,
             references=parent, rubric=STYLE_JUDGE_INSTRUCTION,
@@ -138,9 +136,7 @@ class Evaluator(ProgressLogger):
         from fastsft.data.response_generator import ResponseGenerator
 
         distiset = ResponseGenerator(model=model).generate(prompts)
-        # Key by instruction (unique after dedup) to survive row reordering;
-        # assert_generation rejects a None/empty completion before it corrupts a
-        # downstream judge or embedding.
+        # Key by instruction (unique after dedup) to survive row reordering.
         by_prompt = {
             row["instruction"]: model.assert_generation(
                 row["generation"], row["instruction"]

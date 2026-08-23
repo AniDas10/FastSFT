@@ -192,10 +192,7 @@ def run_sft(
             log,
         )
 
-    # Only the "full" mode trains on the pre-rendered `text` field; the masking
-    # modes hand TRL structured data (prompt/completion or messages) and let it
-    # apply the template. The masking flags are only set when their mode is
-    # active, so an older TRL without the field is never handed an unknown kwarg.
+    # Flags only set when their mode is active, so an older TRL without the field never gets an unknown kwarg.
     masking_flags: dict[str, bool] = {}
     if mode == "completion":
         masking_flags["completion_only_loss"] = True

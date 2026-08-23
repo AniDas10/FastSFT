@@ -3,15 +3,10 @@
 # Default dataset size when the caller doesn't specify.
 DEFAULT_NUM_SAMPLES = 100
 
-# Default sampling temperature for the parent model's generations -- high, to
-# keep the synthetic dataset varied. (The Model base class's own default is
-# separate; the model layer can't depend on data/ without inverting the layers.)
+# Default sampling temperature for the parent model's generations -- high, to keep the synthetic dataset varied.
 DEFAULT_PARENT_TEMPERATURE = 0.9
 
-# Breadth (distinct seed topics) = ceil(N ** BREADTH_EXPONENT); >0.5 favors
-# breadth over depth (breadth:depth = N^exp : N^(1-exp)). Set high (0.85) to
-# actively favor topic diversity over per-topic complexity depth -- e.g. for
-# N=200: ~83 topics x ~2-3 complexity-varied instructions each.
+# Breadth (distinct seed topics) = ceil(N ** BREADTH_EXPONENT); >0.5 favors breadth over depth.
 BREADTH_EXPONENT = 0.85
 
 # Extra guide-output budget per seed, so many-seed requests don't truncate.

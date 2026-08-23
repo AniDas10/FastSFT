@@ -14,9 +14,7 @@ The `python -m` spot-check CLI (rich-rendered) lives in eval/inference_viewer.py
 this module only powers it.
 """
 
-# Defers annotation evaluation so the PeftModel/PreTrainedTokenizerBase hints
-# below can stay unquoted despite only being imported under TYPE_CHECKING
-# (peft/torch aren't hard dependencies -- see module docstring).
+# Defers annotation evaluation so the type-only imports below can stay unquoted (peft/torch aren't hard deps).
 from __future__ import annotations
 
 from typing import TYPE_CHECKING, cast
