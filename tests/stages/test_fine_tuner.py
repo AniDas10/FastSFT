@@ -109,15 +109,18 @@ def test_save_output_pushes_to_hub_when_repo_id_set(monkeypatch, tmp_path):
     calls = []
     monkeypatch.setattr(
         "fastsft.stages.fine_tuner.push_to_hub",
-        lambda local_dir, repo_id, repo_type: calls.append((local_dir, repo_id, repo_type))
-        or "https://huggingface.co/org/child-adapter",
+        lambda local_dir, repo_id, repo_type, run_id, ignore_patterns: calls.append(
+            (local_dir, repo_id, repo_type, run_id, ignore_patterns)
+        )
+        or "https://huggingface.co/org/child-adapter/tree/main/run-7",
     )
 
     tuner = _tuner(model_repo_id="org/child-adapter")
     destination = tuner.save_output(str(source), run_id="run-7")
 
     assert destination == str(tmp_path / "run-7")
-    assert calls == [(destination, "org/child-adapter", "model")]
+    # Trainer checkpoint subdirectories must never be pushed to the Hub.
+    assert calls == [(destination, "org/child-adapter", "model", "run-7", ["checkpoint-*"])]
 
 
 def test_save_output_skips_hub_push_when_repo_id_absent(monkeypatch, tmp_path):

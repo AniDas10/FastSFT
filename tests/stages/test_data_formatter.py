@@ -129,15 +129,17 @@ def test_save_output_pushes_to_hub_when_repo_id_set(monkeypatch):
     calls = []
     monkeypatch.setattr(
         "fastsft.stages.data_formatter.push_to_hub",
-        lambda local_dir, repo_id, repo_type: calls.append((local_dir, repo_id, repo_type))
-        or "https://huggingface.co/datasets/org/name",
+        lambda local_dir, repo_id, repo_type, run_id: calls.append(
+            (local_dir, repo_id, repo_type, run_id)
+        )
+        or "https://huggingface.co/datasets/org/name/tree/main/run-7",
     )
 
     formatter = _formatter(dataset_repo_id="org/name")
     path = formatter.save_output(object(), run_id="run-7")
 
     assert path == "datasets/formatted/run-7"
-    assert calls == [("datasets/formatted/run-7", "org/name", "dataset")]
+    assert calls == [("datasets/formatted/run-7", "org/name", "dataset", "run-7")]
 
 
 def test_save_output_skips_hub_push_when_repo_id_absent(monkeypatch):

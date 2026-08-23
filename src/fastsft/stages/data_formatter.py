@@ -44,7 +44,7 @@ class DataFormatter(Stage):
     def save_output(self, output: Distiset, run_id: str) -> str:
         path = save_distiset(output, FORMATTED_OUTPUT_SUBDIR, run_id)
         if self._dataset_repo_id:
-            url = push_to_hub(path, self._dataset_repo_id, "dataset")
+            url = push_to_hub(path, self._dataset_repo_id, "dataset", run_id)
             self._log(f"Pushed formatted dataset to '{url}'.")
         return path
 

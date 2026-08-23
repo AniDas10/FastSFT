@@ -5,7 +5,13 @@ or model repos). CLI argument validation lives in validation_checks.py.
 import os
 
 from dotenv import load_dotenv
-from huggingface_hub import create_repo, get_token, snapshot_download, upload_folder
+from huggingface_hub import (
+    create_repo,
+    get_token,
+    list_repo_files,
+    snapshot_download,
+    upload_folder,
+)
 from huggingface_hub.utils import HFValidationError, validate_repo_id
 
 load_dotenv()
@@ -22,21 +28,54 @@ def looks_like_repo_id(value: str) -> bool:
     return True
 
 
-def push_to_hub(local_dir: str, repo_id: str, repo_type: str) -> str:
-    """Create `repo_id` if needed and upload `local_dir`'s contents; returns the
-    Hub URL. Called in addition to, never instead of, the local save."""
-    create_repo(repo_id, repo_type=repo_type, exist_ok=True)
-    upload_folder(repo_id=repo_id, folder_path=local_dir, repo_type=repo_type)
-    prefix = "datasets/" if repo_type == "dataset" else ""
-    return f"https://huggingface.co/{prefix}{repo_id}"
+def push_to_hub(
+    local_dir: str,
+    repo_id: str,
+    repo_type: str,
+    run_id: str,
+    ignore_patterns: list[str] | None = None,
+) -> str:
+    """Create `repo_id` if needed and upload `local_dir` under path_in_repo=`run_id`
+    (mirroring the local `<output_root>/<run_id>` layout, so repeated pushes never
+    overwrite a prior run); returns that run's Hub URL. Called in addition to,
+    never instead of, the local save."""
+    # create_repo resolves a bare "name" to the token owner's "namespace/name" --
+    # reuse that resolved id, since upload_folder won't re-resolve it itself.
+    repo_url = create_repo(repo_id, repo_type=repo_type, exist_ok=True)
+    upload_folder(
+        repo_id=repo_url.repo_id,
+        folder_path=local_dir,
+        path_in_repo=run_id,
+        repo_type=repo_type,
+        ignore_patterns=ignore_patterns,
+    )
+    return f"{repo_url}/tree/main/{run_id}"
+
+
+def _latest_run_id(repo_id: str, repo_type: str) -> str:
+    """The most recent run_id pushed to `repo_id` (its top-level path segments,
+    which sort chronologically since run ids are RUN_TIMESTAMP_FORMAT strings)."""
+    files = list_repo_files(repo_id, repo_type=repo_type)
+    runs = sorted({f.split("/", 1)[0] for f in files if "/" in f})
+    if not runs:
+        raise FileNotFoundError(f"No runs found in Hub repo '{repo_id}'.")
+    return runs[-1]
 
 
 def resolve_input(path_or_repo_id: str, repo_type: str) -> str:
-    """If `path_or_repo_id` looks like a repo id, download a local snapshot and
-    return its path; otherwise return it unchanged as a local path."""
-    if looks_like_repo_id(path_or_repo_id):
-        return snapshot_download(repo_id=path_or_repo_id, repo_type=repo_type)
-    return path_or_repo_id
+    """If `path_or_repo_id` looks like a repo id, download its latest pushed
+    run and return that run's local path; otherwise return `path_or_repo_id`
+    unchanged as a local path."""
+    if not looks_like_repo_id(path_or_repo_id):
+        return path_or_repo_id
+
+    run_id = _latest_run_id(path_or_repo_id, repo_type)
+    local_dir = snapshot_download(
+        repo_id=path_or_repo_id,
+        repo_type=repo_type,
+        allow_patterns=[f"{run_id}/*"],
+    )
+    return os.path.join(local_dir, run_id)
 
 
 def repo_id_error(repo_id: str) -> str | None:

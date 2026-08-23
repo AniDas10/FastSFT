@@ -41,19 +41,38 @@ def test_looks_like_repo_id_false_for_existing_local_dir(tmp_path, monkeypatch):
     assert looks_like_repo_id("modelsets/run-1") is False
 
 
-def test_resolve_input_downloads_for_repo_id(monkeypatch):
+def test_resolve_input_downloads_latest_run_for_repo_id(monkeypatch):
+    monkeypatch.setattr(
+        "fastsft.hf_helper.list_repo_files",
+        lambda repo_id, repo_type: [
+            "20260101_000000/adapter_config.json",
+            "20260301_120000/adapter_config.json",
+            "20260201_000000/adapter_config.json",
+            ".gitattributes",
+        ],
+    )
     captured = {}
 
-    def fake_snapshot_download(*, repo_id, repo_type):
-        captured["args"] = (repo_id, repo_type)
+    def fake_snapshot_download(*, repo_id, repo_type, allow_patterns):
+        captured["args"] = (repo_id, repo_type, allow_patterns)
         return "/cache/downloaded"
 
     monkeypatch.setattr("fastsft.hf_helper.snapshot_download", fake_snapshot_download)
 
     result = resolve_input("org/dataset-name", "dataset")
 
-    assert result == "/cache/downloaded"
-    assert captured["args"] == ("org/dataset-name", "dataset")
+    # Timestamped run ids sort lexicographically == chronologically -> latest wins.
+    assert captured["args"] == ("org/dataset-name", "dataset", ["20260301_120000/*"])
+    assert result == "/cache/downloaded/20260301_120000"
+
+
+def test_resolve_input_raises_when_repo_has_no_runs(monkeypatch):
+    monkeypatch.setattr(
+        "fastsft.hf_helper.list_repo_files",
+        lambda repo_id, repo_type: [".gitattributes", "README.md"],
+    )
+    with pytest.raises(FileNotFoundError, match="No runs found"):
+        resolve_input("org/dataset-name", "dataset")
 
 
 def test_resolve_input_returns_local_path_unchanged(monkeypatch):
@@ -69,35 +88,93 @@ def test_resolve_input_returns_local_path_unchanged(monkeypatch):
     assert called == []
 
 
-def test_push_to_hub_creates_then_uploads(monkeypatch):
+class _FakeRepoUrl(str):
+    """Stands in for huggingface_hub's RepoUrl: a str URL with a resolved .repo_id."""
+
+    def __new__(cls, url, repo_id):
+        obj = super().__new__(cls, url)
+        obj.repo_id = repo_id
+        return obj
+
+
+def test_push_to_hub_uploads_under_run_id_path_with_already_namespaced_id(monkeypatch):
     calls = []
+    resolved = _FakeRepoUrl(
+        "https://huggingface.co/datasets/org/dataset-name", "org/dataset-name"
+    )
     monkeypatch.setattr(
         "fastsft.hf_helper.create_repo",
-        lambda repo_id, repo_type, exist_ok: calls.append(("create", repo_id, repo_type, exist_ok)),
+        lambda repo_id, repo_type, exist_ok: calls.append(("create", repo_id, repo_type, exist_ok))
+        or resolved,
     )
     monkeypatch.setattr(
         "fastsft.hf_helper.upload_folder",
-        lambda repo_id, folder_path, repo_type: calls.append(
-            ("upload", repo_id, folder_path, repo_type)
+        lambda repo_id, folder_path, path_in_repo, repo_type, ignore_patterns: calls.append(
+            ("upload", repo_id, folder_path, path_in_repo, repo_type, ignore_patterns)
         ),
     )
 
-    url = push_to_hub("/local/dir", "org/dataset-name", "dataset")
+    url = push_to_hub("/local/dir", "org/dataset-name", "dataset", "20260822_163827")
 
     assert calls == [
         ("create", "org/dataset-name", "dataset", True),
-        ("upload", "org/dataset-name", "/local/dir", "dataset"),
+        ("upload", "org/dataset-name", "/local/dir", "20260822_163827", "dataset", None),
     ]
-    assert url == "https://huggingface.co/datasets/org/dataset-name"
+    # Never overwrites a prior run -- each push lands under its own run_id path.
+    assert url == "https://huggingface.co/datasets/org/dataset-name/tree/main/20260822_163827"
 
 
-def test_push_to_hub_model_url_has_no_dataset_prefix(monkeypatch):
-    monkeypatch.setattr("fastsft.hf_helper.create_repo", lambda repo_id, **_: None)
-    monkeypatch.setattr("fastsft.hf_helper.upload_folder", lambda **_: None)
+def test_push_to_hub_uploads_using_namespace_resolved_by_create_repo(monkeypatch):
+    """Regression: create_repo auto-namespaces a bare "name" to the token
+    owner's "namespace/name" -- upload_folder must use that resolved id, not
+    the original bare one, or it 404s against a repo that doesn't exist."""
+    calls = []
+    resolved = _FakeRepoUrl(
+        "https://huggingface.co/datasets/alice/fastsft-test-dataset",
+        "alice/fastsft-test-dataset",
+    )
+    monkeypatch.setattr(
+        "fastsft.hf_helper.create_repo",
+        lambda repo_id, repo_type, exist_ok: calls.append(("create", repo_id, repo_type, exist_ok))
+        or resolved,
+    )
+    monkeypatch.setattr(
+        "fastsft.hf_helper.upload_folder",
+        lambda repo_id, folder_path, path_in_repo, repo_type, ignore_patterns: calls.append(
+            ("upload", repo_id, folder_path, path_in_repo, repo_type, ignore_patterns)
+        ),
+    )
 
-    url = push_to_hub("/local/adapter", "org/child-model", "model")
+    url = push_to_hub("/local/dir", "fastsft-test-dataset", "dataset", "20260822_163827")
 
-    assert url == "https://huggingface.co/org/child-model"
+    assert calls == [
+        ("create", "fastsft-test-dataset", "dataset", True),
+        ("upload", "alice/fastsft-test-dataset", "/local/dir", "20260822_163827", "dataset", None),
+    ]
+    assert (
+        url
+        == "https://huggingface.co/datasets/alice/fastsft-test-dataset/tree/main/20260822_163827"
+    )
+
+
+def test_push_to_hub_forwards_ignore_patterns(monkeypatch):
+    calls = []
+    resolved = _FakeRepoUrl("https://huggingface.co/org/child-model", "org/child-model")
+    monkeypatch.setattr(
+        "fastsft.hf_helper.create_repo", lambda repo_id, repo_type, exist_ok: resolved
+    )
+    monkeypatch.setattr(
+        "fastsft.hf_helper.upload_folder",
+        lambda repo_id, folder_path, path_in_repo, repo_type, ignore_patterns: calls.append(
+            ignore_patterns
+        ),
+    )
+
+    push_to_hub(
+        "/local/adapter", "org/child-model", "model", "run-7", ignore_patterns=["checkpoint-*"]
+    )
+
+    assert calls == [["checkpoint-*"]]
 
 
 @pytest.mark.parametrize(

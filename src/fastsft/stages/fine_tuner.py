@@ -141,7 +141,11 @@ class FineTuner(Stage):
         destination = os.path.join(modelsets_dir(), run_id)
         shutil.copytree(output, destination, dirs_exist_ok=True)
         if self._model_repo_id:
-            url = push_to_hub(destination, self._model_repo_id, "model")
+            # Trainer checkpoints are training-loop intermediates, not part of
+            # the exported adapter -- exclude them from the Hub push.
+            url = push_to_hub(
+                destination, self._model_repo_id, "model", run_id, ignore_patterns=["checkpoint-*"]
+            )
             self._log(f"Pushed adapter to '{url}'.")
         return destination
 
