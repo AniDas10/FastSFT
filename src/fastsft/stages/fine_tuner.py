@@ -67,7 +67,7 @@ class FineTuner(Stage):
     def _run_modal(self, chosen: TrainingConfig, train_ds: Any, eval_ds: Any) -> str:
         self._log(f"[2/3] Dispatching training to Modal ({chosen.gpu_tier})...")
         job_id = uuid.uuid4().hex[:12]
-        with app.run():
+        with app.run(detach=True):
             tar_path = train_lora.with_options(
                 gpu=chosen.gpu_tier, timeout=chosen.modal_timeout_seconds
             ).remote(
