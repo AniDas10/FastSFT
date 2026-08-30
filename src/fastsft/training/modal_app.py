@@ -14,15 +14,18 @@ import modal
 
 app = modal.App("fastsft-finetune")
 
-# The remote fn calls `from fastsft.training.trainer import run_sft`, so the
-# `fastsft` package must exist in the image. Under the src/ layout Modal no
-# longer auto-mounts loose top-level files, so add the installed package's
-# source explicitly. (Only fastsft's own code is added; the ML wheels come from
-# pip_install above.) Verify against your installed modal version at the e2e step.
+# src/ layout isn't auto-mounted by Modal, so add fastsft's source explicitly.
+# Versions pinned to uv.lock (bitsandbytes has no CPU/macOS wheel, pinned separately) -- bump deliberately and re-run the Modal e2e step.
 image = (
     modal.Image.debian_slim(python_version="3.12")
     .pip_install(
-        "torch", "transformers", "peft", "trl", "bitsandbytes", "accelerate", "datasets"
+        "torch==2.13.0",
+        "transformers==5.14.1",
+        "peft==0.20.0",
+        "trl==1.9.2",
+        "bitsandbytes==0.50.1",
+        "accelerate==1.14.0",
+        "datasets==5.0.1",
     )
     .add_local_python_source("fastsft")
 )

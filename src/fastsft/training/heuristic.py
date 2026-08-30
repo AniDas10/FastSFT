@@ -35,10 +35,7 @@ from fastsft.training.constants import (
 
 console = Console()
 
-# (TrainingConfig field path, one-line explanation) -- printed by
-# `python -m fastsft.training.heuristic` as a quick reference for what each knob
-# does and how it affects cost/quality/feasibility. Ordered to match
-# TrainingConfig's own field order.
+# (TrainingConfig field path, one-line explanation); printed by `python -m fastsft.training.heuristic`.
 KNOB_DESCRIPTIONS: list[tuple[str, str]] = [
     (
         "gpu_tier",

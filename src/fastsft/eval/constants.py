@@ -1,29 +1,23 @@
 """Constants for the eval package (extrinsic judge-based evaluation)."""
 
-# Default size of the held-out eval prompt set. Smaller than a training run --
-# every prompt costs three generations (parent, tuned, untuned) plus judging.
+# Every prompt costs three generations (parent, tuned, untuned) plus judging.
 DEFAULT_NUM_EVAL_PROMPTS = 50
 
-# Local Hugging Face sentence-embedding model for parent-similarity scoring.
-# Small and CPU-friendly; runs via sentence-transformers (evaluation extra).
+# CPU-friendly; runs via sentence-transformers (evaluation extra).
 DEFAULT_EMBEDDING_MODEL = "sentence-transformers/all-MiniLM-L6-v2"
 
-# Child-inference generation budget (new tokens per answer) and how many
-# prompts to feed the model at once.
 DEFAULT_MAX_NEW_TOKENS = 512
 DEFAULT_INFERENCE_BATCH_SIZE = 8
 
 # Compare each pair twice with A/B swapped to cancel the judge's position bias.
 DEFAULT_SWAP_POSITIONS = True
 
-# Eval results live in evalsets_dir()/<run_id>/, one folder per eval/run.py invocation.
 EVAL_RESULTS_FILENAME = "eval_results.json"
 
-# Raw per-prompt answers, written right after generation so a judging failure doesn't lose them.
+# Written right after generation so a judging failure doesn't lose them.
 EVAL_ANSWERS_FILENAME = "eval_answers.json"
 
-# Rubric (judge system prompt) for the pairwise quality comparison. Deliberately
-# generic -- it drives both tuned-vs-untuned and tuned-vs-parent comparisons.
+# Deliberately generic -- drives both tuned-vs-untuned and tuned-vs-parent comparisons.
 COMPARISON_JUDGE_INSTRUCTION = (
     "You are comparing two AI assistant responses, A and B, to the same user "
     "question. Decide which response is higher quality overall -- more helpful, "
@@ -34,12 +28,7 @@ COMPARISON_JUDGE_INSTRUCTION = (
     "quality."
 )
 
-# Rubric for the parent-likeness comparison: which candidate answer is more like
-# the reference (parent) in STYLE -- tone, voice, structure, formatting,
-# verbosity -- regardless of which is more correct. This is the metric aligned
-# with the phase-0 distillation objective (voice/tone transfer) that the
-# generic-quality rubric above doesn't capture; it excludes correctness (the
-# quality metric's job) so the two stay orthogonal.
+# Excludes correctness, to stay orthogonal to the quality rubric above.
 STYLE_JUDGE_INSTRUCTION = (
     "You are given a user question, a REFERENCE response, and two candidate "
     "responses, A and B. Decide which candidate more closely matches the "

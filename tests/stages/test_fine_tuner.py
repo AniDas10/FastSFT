@@ -98,3 +98,42 @@ def test_split_validation_is_deterministic():
     # seed=42 -> identical partition across calls.
     assert train_a["text"] == train_b["text"]
     assert eval_a["text"] == eval_b["text"]
+
+
+def test_save_output_pushes_to_hub_when_repo_id_set(monkeypatch, tmp_path):
+    monkeypatch.setattr("fastsft.stages.fine_tuner.modelsets_dir", lambda: str(tmp_path))
+    source = tmp_path / "trained_adapter"
+    source.mkdir()
+    (source / "adapter_model.bin").write_text("weights")
+
+    calls = []
+    monkeypatch.setattr(
+        "fastsft.stages.fine_tuner.push_to_hub",
+        lambda local_dir, repo_id, repo_type, run_id, ignore_patterns: calls.append(
+            (local_dir, repo_id, repo_type, run_id, ignore_patterns)
+        )
+        or "https://huggingface.co/org/child-adapter/tree/main/run-7",
+    )
+
+    tuner = _tuner(model_repo_id="org/child-adapter")
+    destination = tuner.save_output(str(source), run_id="run-7")
+
+    assert destination == str(tmp_path / "run-7")
+    # Trainer checkpoint subdirectories must never be pushed to the Hub.
+    assert calls == [(destination, "org/child-adapter", "model", "run-7", ["checkpoint-*"])]
+
+
+def test_save_output_skips_hub_push_when_repo_id_absent(monkeypatch, tmp_path):
+    monkeypatch.setattr("fastsft.stages.fine_tuner.modelsets_dir", lambda: str(tmp_path))
+    source = tmp_path / "trained_adapter"
+    source.mkdir()
+
+    calls = []
+    monkeypatch.setattr(
+        "fastsft.stages.fine_tuner.push_to_hub",
+        lambda *args, **kwargs: calls.append((args, kwargs)),
+    )
+
+    _tuner().save_output(str(source), run_id="run-7")
+
+    assert calls == []

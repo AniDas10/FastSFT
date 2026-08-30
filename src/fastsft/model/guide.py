@@ -45,9 +45,6 @@ class Guide(Model):
         )
         row = next(iter(distiset["default"]["train"]))
         generation = self.assert_structured_output(row["generation"])
-        # pydantic isn't installed under CI's dev-only mypy env (only third-party
-        # dep in this file), so BaseModel resolves to Any and the classmethod call
-        # below would otherwise infer Any -- the explicit annotation pins it back
-        # to the real return type.
+        # Explicit annotation: pydantic missing from CI's mypy env would otherwise let this infer as Any.
         result: GuideInstructions = GuideInstructions.model_validate_json(generation)
         return result

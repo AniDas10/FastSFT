@@ -26,7 +26,6 @@ class DataRefiner:
     ) -> Distiset:
         train = distiset["default"]["train"]
 
-        # Score the initial batch once; thereafter score only fresh rows.
         scores = self._score(train)
         for _ in range(MAX_REFINE_ITERATIONS):
             if self._judge_model.failed_sample_count(scores, threshold=threshold) == 0:

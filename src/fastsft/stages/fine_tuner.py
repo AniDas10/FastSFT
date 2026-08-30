@@ -12,6 +12,7 @@ from typing import Any
 from distilabel.distiset import Distiset
 
 from fastsft.helper import modelsets_dir
+from fastsft.hf_helper import push_to_hub
 from fastsft.stages.base import Stage
 from fastsft.stages.constants import FINE_TUNER
 from fastsft.training.config import AdapterConfig, TrainingConfig, TrainingLoopConfig
@@ -31,12 +32,14 @@ class FineTuner(Stage):
         child_model_id: str,
         training_config: TrainingConfig | None = None,
         local_training: bool = False,
+        model_repo_id: str | None = None,
         verbose: bool = True,
     ):
         super().__init__(verbose=verbose)
         self._child_model_id = child_model_id
         self._training_config = training_config
         self._local_training = local_training
+        self._model_repo_id = model_repo_id
 
     def _validate_input(self, formatted_distiset: Distiset) -> None:
         train = formatted_distiset["default"]["train"]
@@ -64,7 +67,7 @@ class FineTuner(Stage):
     def _run_modal(self, chosen: TrainingConfig, train_ds: Any, eval_ds: Any) -> str:
         self._log(f"[2/3] Dispatching training to Modal ({chosen.gpu_tier})...")
         job_id = uuid.uuid4().hex[:12]
-        with app.run():
+        with app.run(detach=True):
             tar_path = train_lora.with_options(
                 gpu=chosen.gpu_tier, timeout=chosen.modal_timeout_seconds
             ).remote(
@@ -137,6 +140,13 @@ class FineTuner(Stage):
         """Copy adapter to modelsets_dir()/run_id."""
         destination = os.path.join(modelsets_dir(), run_id)
         shutil.copytree(output, destination, dirs_exist_ok=True)
+        if self._model_repo_id:
+            # Trainer checkpoints are training-loop intermediates, not part of
+            # the exported adapter -- exclude them from the Hub push.
+            url = push_to_hub(
+                destination, self._model_repo_id, "model", run_id, ignore_patterns=["checkpoint-*"]
+            )
+            self._log(f"Pushed adapter to '{url}'.")
         return destination
 
     def _split_validation(self, distiset: Distiset, validation_split: float) -> tuple[Any, Any]:
@@ -154,8 +164,6 @@ class FineTuner(Stage):
 
         extract_dir = tempfile.mkdtemp(prefix="finetuner_adapter_")
         with tarfile.open(local_tar_path, "r:gz") as tar:
-            # filter="data" blocks path-traversal/special-file entries and is
-            # the default in Python 3.14; set explicitly to silence the 3.12
-            # deprecation warning and lock the behavior in.
+            # filter="data" blocks path-traversal/special-file entries; explicit since it's not yet the 3.12 default.
             tar.extractall(extract_dir, filter="data")
         return extract_dir

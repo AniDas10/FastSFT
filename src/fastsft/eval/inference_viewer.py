@@ -19,6 +19,7 @@ from rich.panel import Panel
 from fastsft.eval.constants import DEFAULT_MAX_NEW_TOKENS
 from fastsft.eval.inference import ChildInferenceEngine
 from fastsft.helper import latest_run_path, modelsets_dir
+from fastsft.hf_helper import resolve_input
 
 console = Console()
 
@@ -30,7 +31,7 @@ def _input_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
         "adapter_dir",
         nargs="?",
         default=None,
-        help="Adapter directory to load (default: latest run under modelsets/).",
+        help="Adapter directory or Hub repo id to load (default: latest run under modelsets/).",
     )
     parser.add_argument("--max-new-tokens", type=int, default=DEFAULT_MAX_NEW_TOKENS)
     parser.add_argument(
@@ -71,7 +72,11 @@ def main() -> None:
     )
     args = _input_args(parser)
 
-    adapter_dir = args.adapter_dir or latest_run_path(modelsets_dir())
+    adapter_dir = (
+        resolve_input(args.adapter_dir, "model")
+        if args.adapter_dir
+        else latest_run_path(modelsets_dir())
+    )
     engine = ChildInferenceEngine(adapter_dir, max_new_tokens=args.max_new_tokens)
 
     tuned = engine.generate_tuned([args.prompt])[0]

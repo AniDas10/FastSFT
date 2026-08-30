@@ -11,12 +11,14 @@ import pytest
 from fastsft.stages.constants import STAGE_ORDER
 from fastsft.validation_checks import (
     validate_eval_flags,
+    validate_hf_flags,
     validate_start_stage,
     validate_training_flags,
 )
 
 FIRST_STAGE = STAGE_ORDER[0]
 LATER_STAGE = STAGE_ORDER[1]
+TERMINAL_STAGE = STAGE_ORDER[-1]  # fine_tuner -- skips data_formatter
 
 
 class _RecordingParser:
@@ -170,3 +172,62 @@ def test_eval_non_positive_prompts_error(n):
     with pytest.raises(SystemExit):
         validate_eval_flags(_ns(num_eval_prompts=n), parser)
     assert "must be positive" in parser.message
+
+
+# --- validate_hf_flags -------------------------------------------------------
+
+def _hf_ns(**overrides):
+    base = dict(dataset_repo_id=None, model_repo_id=None, start_stage=FIRST_STAGE)
+    base.update(overrides)
+    return _ns(**base)
+
+
+def test_hf_no_flags_is_ok(monkeypatch):
+    monkeypatch.setattr("fastsft.validation_checks.has_token", lambda: False)
+    parser = _RecordingParser()
+    validate_hf_flags(_hf_ns(), parser)
+    assert parser.message is None
+
+
+def test_hf_dataset_repo_id_with_terminal_start_stage_errors(monkeypatch):
+    # fine_tuner skips data_formatter entirely, so --dataset-repo-id would be a no-op.
+    monkeypatch.setattr("fastsft.validation_checks.has_token", lambda: True)
+    parser = _RecordingParser()
+    with pytest.raises(SystemExit):
+        validate_hf_flags(
+            _hf_ns(dataset_repo_id="org/data", start_stage=TERMINAL_STAGE), parser
+        )
+    assert "has no effect" in parser.message
+
+
+def test_hf_model_repo_id_with_terminal_start_stage_is_ok(monkeypatch):
+    # fine_tuner always runs, so --model-repo-id is never a no-op regardless of start stage.
+    monkeypatch.setattr("fastsft.validation_checks.has_token", lambda: True)
+    parser = _RecordingParser()
+    validate_hf_flags(_hf_ns(model_repo_id="org/model", start_stage=TERMINAL_STAGE), parser)
+    assert parser.message is None
+
+
+def test_hf_malformed_repo_id_errors(monkeypatch):
+    monkeypatch.setattr("fastsft.validation_checks.has_token", lambda: True)
+    parser = _RecordingParser()
+    with pytest.raises(SystemExit):
+        validate_hf_flags(_hf_ns(dataset_repo_id="too/many/slashes"), parser)
+    assert "--dataset-repo-id" in parser.message
+
+
+def test_hf_missing_token_errors(monkeypatch):
+    monkeypatch.setattr("fastsft.validation_checks.has_token", lambda: False)
+    parser = _RecordingParser()
+    with pytest.raises(SystemExit):
+        validate_hf_flags(_hf_ns(model_repo_id="org/model"), parser)
+    assert "Hugging Face token" in parser.message
+
+
+def test_hf_valid_repo_id_with_token_is_ok(monkeypatch):
+    monkeypatch.setattr("fastsft.validation_checks.has_token", lambda: True)
+    parser = _RecordingParser()
+    validate_hf_flags(
+        _hf_ns(dataset_repo_id="org/data", model_repo_id="org/model"), parser
+    )
+    assert parser.message is None

@@ -248,11 +248,14 @@ def run_eval_main(monkeypatch):
     """Runs main() with the resolution helpers + Evaluator + IO patched out.
     Returns (evaluator, save_calls)."""
 
-    def _run(argv):
+    def _run(argv, resolve_input_fn=None):
         save_calls = []
         _RecordingEvaluator.last = None
         monkeypatch.setattr(run_mod, "load_training_metadata", lambda _dir: {})
         monkeypatch.setattr(run_mod, "latest_run_path", lambda _dir: "modelsets/latest")
+        monkeypatch.setattr(
+            run_mod, "resolve_input", resolve_input_fn or (lambda path, repo_type: path)
+        )
         monkeypatch.setattr(
             run_mod, "_resolve_prompt_set",
             lambda args, config: _FakePromptSet(["a", "b", "c"]),
@@ -301,3 +304,15 @@ def test_main_threads_model_flags_into_config(run_eval_main):
     evaluator, _ = run_eval_main(["--judge-model", "org/judge", "--max-new-tokens", "64"])
     assert evaluator.config.judge_model == "org/judge"
     assert evaluator.config.max_new_tokens == 64
+
+
+def test_adapter_dir_resolved_via_hf_helper_before_use(run_eval_main):
+    captured = {}
+
+    def fake_resolve(path, repo_type):
+        captured["args"] = (path, repo_type)
+        return "RESOLVED_LOCAL_ADAPTER"
+
+    evaluator, _ = run_eval_main(["org/child-adapter"], resolve_input_fn=fake_resolve)
+    assert captured["args"] == ("org/child-adapter", "model")
+    assert evaluator.config.adapter_dir == "RESOLVED_LOCAL_ADAPTER"

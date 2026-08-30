@@ -28,7 +28,6 @@ from fastsft.progress import ProgressLogger, rule
 # loss. Averaged across A/B-swapped orders into a per-prompt score.
 _WIN, _TIE, _LOSS = 1.0, 0.5, 0.0
 
-# How many worked examples to keep for qualitative inspection in the viewer.
 _SAMPLES_KEPT = 3
 
 
@@ -91,9 +90,6 @@ class Evaluator(ProgressLogger):
         tuned_vs_untuned = self._win_rate(judge, prompts, tuned, untuned)
 
         self._log("[3/5] Judging parent-style match (tuned vs untuned)...")
-        # Distillation objective: is the tuned child more like the parent's style
-        # than untuned? Only as good as the reference -- the true styled teacher
-        # when parent_instruction is set, else the parent with no system prompt.
         parent_likeness = self._win_rate(
             judge, prompts, tuned, untuned,
             references=parent, rubric=STYLE_JUDGE_INSTRUCTION,
@@ -138,9 +134,7 @@ class Evaluator(ProgressLogger):
         from fastsft.data.response_generator import ResponseGenerator
 
         distiset = ResponseGenerator(model=model).generate(prompts)
-        # Key by instruction (unique after dedup) to survive row reordering;
-        # assert_generation rejects a None/empty completion before it corrupts a
-        # downstream judge or embedding.
+        # Key by instruction (unique after dedup) to survive row reordering.
         by_prompt = {
             row["instruction"]: model.assert_generation(
                 row["generation"], row["instruction"]
@@ -180,7 +174,6 @@ class Evaluator(ProgressLogger):
             }
             return judge.compare_to_reference(reference_pairs, prompt=rubric)
 
-        # Order 1: a is presented as "A". Order 2 (swap): a is presented as "B".
         verdicts1 = verdicts_for(a_answers, b_answers)
         verdicts2 = {}
         num_orders = 1

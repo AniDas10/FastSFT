@@ -56,6 +56,21 @@ Runs against the latest `modelsets/<timestamp>/` and generates 50 eval prompts b
 uv run fastsft-eval modelsets/20260809_120000
 ```
 
+### Evaluate an adapter pushed to Hugging Face Hub
+
+The adapter argument also accepts a Hub model repo id in place of a local
+`modelsets/<timestamp>/` path, auto-detected — useful if it was trained (and
+pushed with `--model-repo-id`) elsewhere:
+
+```bash
+uv run fastsft-eval you/my-model
+```
+
+This downloads a local snapshot of the latest pushed run before evaluating
+(pushes accumulate under `<repo>/<run_id>/`, never overwrite); no local
+`modelsets/` directory is needed. Needs a Hugging Face token if the repo is
+private: run `huggingface-cli login` once, or set `HF_TOKEN` in your `.env`.
+
 ### Configure evaluation
 
 | Parameter | What it does | Default | Example |
@@ -250,6 +265,7 @@ Note: Currently, you must provide a parent; the option to skip it is planned.
 | `src/fastsft/eval/results.py` | Core: persist/load eval_answers.json + eval_results.json, interpret results |
 | `src/fastsft/eval/results_viewer.py` | CLI: visualize results + takeaways |
 | `src/fastsft/eval/config.py` | EvalConfig dataclass |
+| `src/fastsft/hf_helper.py` | Resolves a Hugging Face Hub model repo id passed as the adapter argument |
 
 ## Troubleshooting
 
@@ -261,6 +277,7 @@ Note: Currently, you must provide a parent; the option to skip it is planned.
 | Embedding similarity is very low (< 0.3) | Your model may not have learned the parent's style; check **Tuned vs Untuned** metric. If that's also low, training didn't improve quality — revisit data quality or training config. |
 | Local generation looks stuck after "Generating answers..." | Normal on CPU/MPS -- a progress bar (`Generating (tuned)...` / `Generating (untuned)...`) tracks batches; a small model can still take a few minutes with no CUDA. Not a hang. |
 | `--reuse-answers-from` errors with "missing answers for N/M prompts" | The named run's `eval_answers.json` doesn't cover your current prompt set (e.g. it was generated for a different adapter or a different `--num-eval-prompts`). Drop the flag to regenerate, or point at a run that used the same prompt set. |
+| `401`/`403` pulling an adapter repo id | Run `huggingface-cli login`, or set `HF_TOKEN` in `.env`. |
 
 ## Next Steps
 
