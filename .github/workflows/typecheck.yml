@@ -9,7 +9,7 @@ jobs:
   mypy:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: astral-sh/setup-uv@v5
       # --only-group dev installs just mypy, mirroring lint.yml. [tool.mypy]'s
       # ignore_missing_imports=true means the local-training/evaluation ML
