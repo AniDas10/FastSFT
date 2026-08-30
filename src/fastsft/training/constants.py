@@ -10,8 +10,6 @@ MODAL_GPU_TIERS = {
     "H100": (80, 3.95),
 }
 
-# Canonical strategy names -- the single symbolic source for every place
-# that refers to a training strategy by name.
 LORA = "lora"
 QLORA = "qlora"
 

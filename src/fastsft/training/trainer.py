@@ -180,7 +180,6 @@ def run_sft(
         ),
     )
 
-    # Decide how (or whether) to mask prompt tokens out of the loss.
     mode = "full"
     if not loop.get("mask_prompt_loss", True):
         log("prompt masking disabled by config -- training on loss over the whole sequence.")

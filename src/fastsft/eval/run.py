@@ -225,7 +225,6 @@ def main() -> None:
     parent_model, parent_instruction, parent_max_tokens, parent_temperature = (
         _resolve_parent(args, adapter_dir)
     )
-    # This run's own id -- separate from adapter_dir's run id.
     run_id = current_timestamp()
     config = EvalConfig(
         adapter_dir=adapter_dir,

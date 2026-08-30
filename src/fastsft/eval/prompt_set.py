@@ -25,7 +25,6 @@ from fastsft.helper import (
 )
 from fastsft.model.base import Model
 
-# Column name the eval prompts are persisted under.
 PROMPT_COLUMN = "prompt"
 
 

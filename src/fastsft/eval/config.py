@@ -29,8 +29,8 @@ class EvalConfig:
     max_new_tokens: int = DEFAULT_MAX_NEW_TOKENS
     inference_batch_size: int = DEFAULT_INFERENCE_BATCH_SIZE
     swap_positions: bool = DEFAULT_SWAP_POSITIONS
-    # The parent's style system prompt, inferred from the run's training metadata by default (eval/run.py).
+    # Inferred from the run's training metadata by default (eval/run.py).
     parent_instruction: str = ""
-    # The parent's generation recipe, also inferred from training metadata; falls back to pipeline defaults.
+    # Also inferred from training metadata; falls back to pipeline defaults.
     parent_max_tokens: int = DEFAULT_MAX_TOKENS
     parent_temperature: float = DEFAULT_PARENT_TEMPERATURE

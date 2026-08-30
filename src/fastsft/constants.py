@@ -4,15 +4,12 @@ Model-mechanics constants live in model/constants.py and data-generation
 tuning in data/constants.py.
 """
 
-# Base directory holding `datasets/` and `modelsets/`; overridable via env var or --output-dir.
 OUTPUT_DIR_ENV_VAR = "FASTSFT_OUTPUT_DIR"
 DEFAULT_OUTPUT_DIR = "datasets"
 RAW_OUTPUT_SUBDIR = "raw"
 FORMATTED_OUTPUT_SUBDIR = "formatted"
 MODELSETS_OUTPUT_DIR = "modelsets"
-# One evalsets/<run_id>/ folder per eval run: eval_prompts, eval_answers.json, eval_results.json.
 EVALSETS_OUTPUT_DIR = "evalsets"
-# Subfolder name for the eval prompt set within an evalsets run dir (see eval/prompt_set.py).
 EVAL_PROMPTS_SUBDIR = "eval_prompts"
 RUN_TIMESTAMP_FORMAT = "%Y%m%d_%H%M%S"
 

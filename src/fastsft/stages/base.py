@@ -12,10 +12,7 @@ class Stage(ProgressLogger):
     and not overridden. Progress logging (self._log) comes from ProgressLogger.
     """
 
-    # Canonical stage name, set by each subclass from stages/constants.py.
     name: str = ""
-    # Human-readable label for the start/end partition rule bracketing the stage
-    # in the run output. Defaults to a title-cased `name` if a subclass omits it.
     title: str = ""
 
     def __init__(self, verbose: bool = True):

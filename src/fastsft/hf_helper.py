@@ -59,7 +59,8 @@ def _latest_run_id(repo_id: str, repo_type: str) -> str:
     runs = sorted({f.split("/", 1)[0] for f in files if "/" in f})
     if not runs:
         raise FileNotFoundError(f"No runs found in Hub repo '{repo_id}'.")
-    return runs[-1]
+    latest: str = runs[-1]
+    return latest
 
 
 def resolve_input(path_or_repo_id: str, repo_type: str) -> str:
