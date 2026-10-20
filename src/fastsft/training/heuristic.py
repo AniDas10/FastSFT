@@ -68,6 +68,23 @@ KNOB_DESCRIPTIONS: list[tuple[str, str]] = [
         "fast the adapter learns."),
     ),
     (
+        "adapter.use_dora",
+        ("Weight-Decomposed LoRA (DoRA): splits weight updates into magnitude "
+        "and direction for generally better quality than plain LoRA at the "
+        "same rank, for a small compute/memory cost. On by default."),
+    ),
+    (
+        "adapter.use_rslora",
+        ("Rank-stabilized LoRA: scales by alpha/sqrt(rank) instead of "
+        "alpha/rank. Mainly matters at higher ranks; off by default."),
+    ),
+    (
+        "adapter.init_lora_weights",
+        ("How the adapter is initialized. True = peft's default (gaussian); "
+        "'pissa' = data-free SVD init of the base weights, which can speed up "
+        "convergence but changes how the final adapter is saved (see trainer.py)."),
+    ),
+    (
         "loop.batch_size",
         ("Samples processed per training step. Larger = more stable "
         "gradients, more memory. The heuristic picks the largest that fits "

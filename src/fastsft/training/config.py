@@ -7,7 +7,10 @@ from fastsft.training.constants import (
     DEFAULT_GRAD_ACCUMULATION,
     DEFAULT_LEARNING_RATE,
     DEFAULT_LORA_DROPOUT,
+    DEFAULT_LORA_INIT_WEIGHTS,
     DEFAULT_LORA_RANK,
+    DEFAULT_LORA_USE_DORA,
+    DEFAULT_LORA_USE_RSLORA,
     DEFAULT_MASK_PROMPT_LOSS,
     DEFAULT_MODAL_TIMEOUT_SECONDS,
     DEFAULT_STRATEGY,
@@ -27,6 +30,10 @@ class AdapterConfig:
     rank: int = DEFAULT_LORA_RANK
     target_modules: list[str] = field(default_factory=lambda: list(LORA_TARGET_MODULES))
     dropout: float = DEFAULT_LORA_DROPOUT
+    use_dora: bool = DEFAULT_LORA_USE_DORA
+    use_rslora: bool = DEFAULT_LORA_USE_RSLORA
+    # True = peft's default gaussian init; "pissa" = data-free SVD init (see trainer.py's save-path handling).
+    init_lora_weights: bool | str = DEFAULT_LORA_INIT_WEIGHTS
 
 
 @dataclass

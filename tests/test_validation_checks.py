@@ -91,7 +91,8 @@ def test_later_stage_rejects_prompt():
 def _training_ns(**overrides):
     base = dict(
         gpu_tier=None, local=False, modal_timeout=None, strategy=None, lora_rank=None,
-        target_modules=None, lora_dropout=None, batch_size=None, grad_accumulation=None,
+        target_modules=None, lora_dropout=None, use_dora=None, use_rslora=None,
+        lora_init=None, batch_size=None, grad_accumulation=None,
         learning_rate=None, max_epochs=None, eval_steps=None, early_stopping_patience=None,
         validation_split=None,
     )
@@ -141,6 +142,14 @@ def test_training_override_without_destination_errors():
     assert "require --gpu-tier or --local" in parser.message
     assert "--lora-rank" in parser.message
     assert "--batch-size" in parser.message
+
+
+def test_training_use_dora_override_without_destination_errors():
+    # --no-use-dora (False) is meaningful (is-not-None, not truthy) and must be caught too.
+    parser = _RecordingParser()
+    with pytest.raises(SystemExit):
+        validate_training_flags(_training_ns(use_dora=False), parser)
+    assert "--use-dora" in parser.message
 
 
 def test_training_override_with_local_is_ok():
