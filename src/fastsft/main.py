@@ -29,12 +29,15 @@ from fastsft.training.constants import (
     DEFAULT_LEARNING_RATE,
     DEFAULT_LORA_DROPOUT,
     DEFAULT_LORA_RANK,
+    DEFAULT_LORA_USE_DORA,
+    DEFAULT_LORA_USE_RSLORA,
     DEFAULT_MODAL_TIMEOUT_SECONDS,
     DEFAULT_STRATEGY,
     DEFAULT_VALIDATION_SPLIT,
     EARLY_STOPPING_PATIENCE,
     EVAL_STEPS,
     LORA,
+    LORA_INIT_PISSA,
     LORA_TARGET_MODULES,
     MAX_EPOCHS,
     MODAL_GPU_TIERS,
@@ -198,6 +201,29 @@ def _input_args(parser: argparse.ArgumentParser) -> argparse.Namespace:
         f"(default: {DEFAULT_LORA_DROPOUT}).",
     )
     parser.add_argument(
+        "--use-dora",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Use DoRA (weight-decomposed LoRA) instead of plain LoRA, only "
+        f"used with --gpu-tier or --local (default: {DEFAULT_LORA_USE_DORA}). "
+        "Pass --no-use-dora to opt out.",
+    )
+    parser.add_argument(
+        "--use-rslora",
+        action=argparse.BooleanOptionalAction,
+        default=None,
+        help="Use rank-stabilized LoRA scaling (alpha/sqrt(rank)), only used "
+        f"with --gpu-tier or --local (default: {DEFAULT_LORA_USE_RSLORA}).",
+    )
+    parser.add_argument(
+        "--lora-init",
+        choices=["default", LORA_INIT_PISSA],
+        default=None,
+        help="Adapter init strategy, only used with --gpu-tier or --local "
+        "(default: default -- peft's gaussian init). 'pissa' does a "
+        "data-free SVD init that can speed up convergence.",
+    )
+    parser.add_argument(
         "--batch-size",
         type=int,
         default=None,
@@ -298,6 +324,11 @@ def main() -> None:
             "rank": args.lora_rank,
             "target_modules": args.target_modules,
             "dropout": args.lora_dropout,
+            "use_dora": args.use_dora,
+            "use_rslora": args.use_rslora,
+            "init_lora_weights": {"default": True, LORA_INIT_PISSA: LORA_INIT_PISSA}.get(
+                args.lora_init
+            ),
         }.items()
         if v is not None
     }

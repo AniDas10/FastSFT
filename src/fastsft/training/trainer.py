@@ -12,10 +12,12 @@ tokenizer to decide HOW to keep prompt tokens out of the loss (see it).
 
 import json
 import os
+import shutil
+import tempfile
 from collections.abc import Callable
 from typing import Any
 
-from fastsft.training.constants import ALL_LINEAR_TARGET, QLORA
+from fastsft.training.constants import ALL_LINEAR_TARGET, LORA_INIT_PISSA, QLORA
 
 
 def _write_training_stats(state: Any, output_dir: str, loss_masking: str) -> None:
@@ -168,6 +170,7 @@ def run_sft(
         dtype=torch_dtype,
         device_map=device_map,
     )
+    init_lora_weights = adapter["init_lora_weights"]
     model = get_peft_model(
         model,
         LoraConfig(
@@ -175,10 +178,22 @@ def run_sft(
             lora_alpha=adapter["rank"] * 2,
             target_modules=_resolve_lora_targets(adapter["target_modules"]),
             lora_dropout=adapter["dropout"],
+            use_dora=adapter["use_dora"],
+            use_rslora=adapter["use_rslora"],
+            init_lora_weights=init_lora_weights,
             bias="none",
             task_type="CAUSAL_LM",
         ),
     )
+
+    # PiSSA's init rewrites the base layers in place (SVD residual + principal
+    # components), so the trained adapter only means what it means relative to
+    # that pre-training snapshot. Save it now so the final adapter can be
+    # converted back into a delta that works against the ORIGINAL base weights.
+    pissa_init_dir = None
+    if init_lora_weights == LORA_INIT_PISSA:
+        pissa_init_dir = tempfile.mkdtemp(prefix="lora_pissa_init_")
+        model.save_pretrained(pissa_init_dir)
 
     mode = "full"
     if not loop.get("mask_prompt_loss", True):
@@ -226,5 +241,10 @@ def run_sft(
         ],
     )
     trainer.train()
-    trainer.save_model(output_dir)
+    if pissa_init_dir:
+        model.save_pretrained(output_dir, path_initial_model_for_weight_conversion=pissa_init_dir)
+        tokenizer.save_pretrained(output_dir)
+        shutil.rmtree(pissa_init_dir, ignore_errors=True)
+    else:
+        trainer.save_model(output_dir)
     _write_training_stats(trainer.state, output_dir, mode)

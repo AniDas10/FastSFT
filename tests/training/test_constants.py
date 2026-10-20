@@ -12,7 +12,10 @@ from fastsft.training.constants import (
     BYTES_PER_PARAM,
     DEFAULT_LEARNING_RATE,
     DEFAULT_LORA_DROPOUT,
+    DEFAULT_LORA_INIT_WEIGHTS,
     DEFAULT_LORA_RANK,
+    DEFAULT_LORA_USE_DORA,
+    DEFAULT_LORA_USE_RSLORA,
     DEFAULT_MASK_PROMPT_LOSS,
     DEFAULT_MODAL_TIMEOUT_SECONDS,
     DEFAULT_STRATEGY,
@@ -20,6 +23,7 @@ from fastsft.training.constants import (
     EARLY_STOPPING_PATIENCE,
     EVAL_STEPS,
     LORA,
+    LORA_INIT_PISSA,
     LORA_TARGET_MODULES,
     MAX_EPOCHS,
     MODAL_GPU_TIERS,
@@ -63,6 +67,10 @@ def test_lora_defaults():
     assert DEFAULT_LORA_RANK == 16
     assert DEFAULT_LORA_DROPOUT == 0.05
     assert LORA_TARGET_MODULES == ["q_proj", "k_proj", "v_proj", "o_proj"]
+    assert DEFAULT_LORA_USE_DORA is True
+    assert DEFAULT_LORA_USE_RSLORA is False
+    assert DEFAULT_LORA_INIT_WEIGHTS is True
+    assert LORA_INIT_PISSA == "pissa"
 
 
 def test_all_linear_target_sentinel():

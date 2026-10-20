@@ -172,6 +172,27 @@ def test_zero_valued_override_is_not_dropped_as_falsy(run_main):
     assert pipe.kwargs["training"].adapter.dropout == 0.0
 
 
+def test_use_dora_defaults_to_true(run_main):
+    pipe = run_main(["p", "--gpu-tier", "A100-80GB", "--lora-rank", "8"])
+    assert pipe.kwargs["training"].adapter.use_dora is True
+
+
+def test_no_use_dora_override_is_not_dropped_as_falsy(run_main):
+    # --no-use-dora (False) is meaningful (is-not-None, not truthy) and must land.
+    pipe = run_main(["p", "--gpu-tier", "A100-80GB", "--no-use-dora"])
+    assert pipe.kwargs["training"].adapter.use_dora is False
+
+
+def test_use_rslora_override_lands(run_main):
+    pipe = run_main(["p", "--gpu-tier", "A100-80GB", "--use-rslora"])
+    assert pipe.kwargs["training"].adapter.use_rslora is True
+
+
+def test_lora_init_pissa_override_lands(run_main):
+    pipe = run_main(["p", "--gpu-tier", "A100-80GB", "--lora-init", "pissa"])
+    assert pipe.kwargs["training"].adapter.init_lora_weights == "pissa"
+
+
 def test_local_alone_leaves_training_none(run_main):
     pipe = run_main(["p", "--local"])
     assert pipe.kwargs["local_training"] is True

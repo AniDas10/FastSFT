@@ -16,6 +16,13 @@ QLORA = "qlora"
 DEFAULT_STRATEGY = LORA
 DEFAULT_LORA_RANK = 16
 DEFAULT_LORA_DROPOUT = 0.05
+# DoRA (weight-decomposed LoRA) generally beats plain LoRA at the same rank for a small, fixed compute cost.
+DEFAULT_LORA_USE_DORA = True
+# rsLoRA (alpha/sqrt(r) scaling) mainly helps at higher ranks; opt-in rather than default.
+DEFAULT_LORA_USE_RSLORA = False
+# peft's own default init ("gaussian"); pass "pissa" for a data-free SVD init of the adapter instead.
+DEFAULT_LORA_INIT_WEIGHTS: bool | str = True
+LORA_INIT_PISSA = "pissa"
 DEFAULT_BATCH_SIZE = 8
 DEFAULT_GRAD_ACCUMULATION = 1
 LORA_TARGET_MODULES = ["q_proj", "k_proj", "v_proj", "o_proj"]
